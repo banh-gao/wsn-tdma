@@ -49,7 +49,7 @@ implementation {
 	//Slave
 	am_addr_t masterAddr;
 	bool syncReceived = FALSE;
-	uint8_t missedSyncCount = RESYNC_THRESHOLD; //Start node in resync mode
+	uint8_t missedSyncCount = 0; //Start node in resync mode
 	bool hasJoined = FALSE;
 	uint8_t assignedSlot;
 
@@ -92,11 +92,13 @@ implementation {
 		joinAnsMsg = call JoinAnsSnd.getPayload(&joinAnsBuf, sizeof(JoinAnsMsg));
 
 
-		//Start slot scheduler and schedule first slot
-		//TODO: turn on in specific time slots
+
+		//TODO: turn on only in specific time slots
 		call AMControl.start();
+
+		//TODO: for slaves start scheduler only after success sync
+		//Start slot scheduler and schedule first slot
 		call SlotScheduler.start(0, SYNC_SLOT);
-		//call SlotScheduler.start(0, SYNC_SLOT);
 
 		return SUCCESS;
 	}
@@ -128,12 +130,13 @@ implementation {
 	}
 
 	event void AMControl.startDone(error_t err) {
-		//Signal master ready when radio is on for the first time
+		printf("DEBUG: Radio ON\n");
+
+		//Signal to user that master is ready only when radio is on for the first time
 		if(isMaster && isStarted == FALSE) {
 				isStarted = TRUE;
 				signal Control.startDone(SUCCESS);
 		}
-		printf("DEBUG: Radio ON\n");
 	}
 
 	event uint8_t SlotScheduler.slotEnded(uint8_t slot) {
@@ -144,10 +147,10 @@ implementation {
 
 		//TODO: turn off radio if needed
 
+		
 		if(nextSlot == RESYNC_SLOT) {
-				missedSyncCount = 0;
-				printf("DEBUG: Going in RESYNC MODE\n");
-				//TODO: go to resync mode
+			printf("DEBUG: Going in RESYNC MODE\n");
+			//TODO: go to resync mode
 		}
 
 		return nextSlot;
@@ -169,18 +172,20 @@ implementation {
 	}
 
 	uint8_t getNextSlaveSlot(uint8_t slot) {
-		/* TODO Sync beacon missed, decide if to go to resync mode
 		if(slot == SYNC_SLOT && syncReceived == FALSE) {
 			missedSyncCount++;
+			printf("Missed sync %d/%d\n", missedSyncCount, RESYNC_THRESHOLD);
 
-			//Go to resync mode, RESYNC_SLOT stops the scheduler
-			if(missedSyncCount > RESYNC_THRESHOLD)
+			//Go to resync mode, returning RESYNC_SLOT stops the scheduler
+			if(missedSyncCount >= RESYNC_THRESHOLD) {
+				printf("DEBUG: RESYNC MODE\n");
 				//FIMXE: set to RESYNC_SLOT
 				return SYNC_SLOT;
-		} */
+			}
+		}
 
-		//If node needs to join try to join in next slot
-		if(slot == SYNC_SLOT && hasJoined == FALSE)
+		//If node needs to join try to join in next slot (only if synchronization has succeeded)
+		if(slot == SYNC_SLOT && syncReceived == TRUE && hasJoined == FALSE)
 			return JOIN_SLOT;
 
 		//If join failed, retry in the next epoch
@@ -234,6 +239,7 @@ implementation {
 			call SlotScheduler.syncEpochTime(ref_time);
 			printf("DEBUG: Local scheduler synchronized with master scheduler (slot %d)\n", call SlotScheduler.getScheduledSlot());
 			syncReceived = TRUE;
+			missedSyncCount = 0;
 		}
 
 		return msg;
@@ -326,7 +332,7 @@ implementation {
 		
 		hasJoined = TRUE;
 
-		//Signal slave is ready when it has joined
+		//Signal to user that slave is ready only when it has joined
 		isStarted = TRUE;
 		signal Control.startDone(SUCCESS);
 
