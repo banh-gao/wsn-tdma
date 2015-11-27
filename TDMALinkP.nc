@@ -5,6 +5,9 @@
 
 #define SYNC_SLOT 0
 #define JOIN_SLOT 1
+#define RESYNC_SLOT N_SLOTS //Slots numbers >= N_SLOTS causes the scheduler to stop, it needs to be restarted
+
+#define RESYNC_THRESHOLD 5
 
 module TDMALinkP {
 	provides interface SplitControl as Control;
@@ -39,11 +42,12 @@ implementation {
 	//Master
 	am_addr_t allocatedSlots[N_SLOTS];
 	int nextFreeSlot = 2;
-	int nextListenDataSlot = 0;
+	int nextListenDataSlot = 2;
 
 	//Slave
 	am_addr_t masterAddr;
 	bool syncReceived = FALSE;
+	uint8_t missedSyncCount = RESYNC_THRESHOLD; //Start node in resync mode
 	bool hasJoined = FALSE;
 	uint8_t assignedSlot;
 
@@ -67,14 +71,16 @@ implementation {
 	uint8_t dataLen;
 	bool dataReady = FALSE;
 
-	void startListen();
-	void stopListen();
-
+	// MASTER
 	uint8_t allocateSlot(am_addr_t slave);
 	void sendSyncBeacon();
-	void sendJoinRequest();
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot);
+	uint8_t getNextMasterSlot(uint8_t slot);
+
+	// SLAVE
+	void sendJoinRequest();
 	void sendData();
+	uint8_t getNextSlaveSlot(uint8_t slot);
 
 	command error_t Control.start() {
 		isMaster = (TOS_NODE_ID == 1);
@@ -85,7 +91,7 @@ implementation {
 
 
 		//Start slot scheduler and schedule first slot
-		//FIXME: turn on in specific time slots
+		//TODO: turn on in specific time slots
 		call AMControl.start();
 		call SlotScheduler.start(5000, SYNC_SLOT);
 		//call SlotScheduler.start(0, SYNC_SLOT);
@@ -101,6 +107,10 @@ implementation {
 
 	event void SlotScheduler.slotStarted(uint8_t slot) {
 		printf("Slot %d started\n", slot);
+
+		//TODO: turn on radio if needed
+
+		//TODO: move to radio startDone
 		if(isMaster) {
 			if(slot == SYNC_SLOT)
 				sendSyncBeacon();
@@ -108,7 +118,8 @@ implementation {
 		}
 
 		if(slot == SYNC_SLOT)
-			syncReceived = FALSE; //TODO: Listen for sync
+			syncReceived = FALSE;
+			//TODO: Listen for sync
 		else if (slot == JOIN_SLOT)
 			sendJoinRequest();
 		else
@@ -120,40 +131,58 @@ implementation {
 	}
 
 	event uint8_t SlotScheduler.slotEnded(uint8_t slot) {
+		uint8_t nextSlot;
 		printf("Slot %d ended\n", slot);
-		if(isMaster) {
-			if(slot == SYNC_SLOT)
-				return JOIN_SLOT;
-			else if(slot >= JOIN_SLOT) {
-				//Listen for allocated data slots
-				if(nextFreeSlot > 1) {
-					if(nextListenDataSlot == nextFreeSlot) {
-						nextListenDataSlot = 2;
-						return SYNC_SLOT;
-					} else {
-						return nextListenDataSlot++;
-					}
-				}
-			} else
+
+		nextSlot = (isMaster) ? getNextMasterSlot(slot) : getNextSlaveSlot(slot);
+
+		//TODO: turn off radio if needed
+
+		if(nextSlot == RESYNC_SLOT) {
+				missedSyncCount = 0;
+				printf("Going in RESYNC MODE\n");
+				//TODO: go to resync mode
+		}
+
+		return nextSlot;
+	}
+
+	uint8_t getNextMasterSlot(uint8_t slot) {
+		//Listen for join requests
+		if(slot == SYNC_SLOT)
+			return JOIN_SLOT;
+
+		//Schedule for next allocated data slot and increment
+		if(nextListenDataSlot < nextFreeSlot)
+			return nextListenDataSlot++;
+
+		nextListenDataSlot = 2;
+
+		//No more data slots to listen to, schedule for sync beaconing
+		return SYNC_SLOT;
+	}
+
+	uint8_t getNextSlaveSlot(uint8_t slot) {
+		//Sync beacon missed, decide if to go to resync mode
+		if(slot == SYNC_SLOT && syncReceived == FALSE) {
+			missedSyncCount++;
+
+			//Go to resync mode, RESYNC_SLOT stops the scheduler
+			if(missedSyncCount > RESYNC_THRESHOLD)
+				//FIMXE: set to RESYNC_SLOT
 				return SYNC_SLOT;
 		}
 
-		if(slot == SYNC_SLOT) {
-			if(syncReceived == FALSE) {
-				//TODO: count missed sync and decide for resync mode
-				return SYNC_SLOT;
-			} else {
-				if(hasJoined)
-					return assignedSlot;
-				else
-					return JOIN_SLOT;
-			}
-		}
+		//If node needs to join try to join in next slot
+		if(slot == SYNC_SLOT && hasJoined == FALSE)
+			return JOIN_SLOT;
 
-		if(slot == JOIN_SLOT && hasJoined == TRUE)
-			return assignedSlot;
-		else
+		//If join failed, retry in the next epoch
+		if(slot == JOIN_SLOT && hasJoined == FALSE)
 			return SYNC_SLOT;
+
+		//Transmit data (if any) in the assigned slot
+		return assignedSlot;
 	}
 
 	event void AMControl.stopDone(error_t err) {
@@ -290,7 +319,7 @@ implementation {
 		return msg;
 	}
 
-	/////////////////////////// SLAVE DATA TRANSMISSION ///////////////////////////
+	///////////////////// SLAVE DATA TRANSMISSION INTERFACE ////////////////////
 
 	void sendData() {
 		if(dataReady) {

@@ -45,6 +45,14 @@ implementation {
 		return SUCCESS;
 	}
 
+	command error_t SlotScheduler.stop() {
+		bool wasStarted = isStarted;
+		call StartSlotTimer.stop();
+		call EpochTimer.stop();
+		isStarted = FALSE;
+		return (wasStarted) ? EALREADY : SUCCESS;
+	}
+
 	command void SlotScheduler.syncEpochTime(uint32_t reference_time) {
 		call EpochTimer.startPeriodicAt(reference_time, EPOCH_DURATION);
 		epoch_reference_time = reference_time;
@@ -69,6 +77,11 @@ implementation {
 
 	event void EndSlotTimer.fired() {
 		uint8_t nextSlot = signal SlotScheduler.slotEnded(schedSlot);
+
+		if(nextSlot >= N_SLOTS) {
+			call SlotScheduler.stop();
+			return;
+		}
 
 		if (nextSlot > schedSlot) {
 			schedSlot = nextSlot;
