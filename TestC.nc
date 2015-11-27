@@ -3,10 +3,11 @@ configuration TestC {
 implementation {
 	components TestP;
 	components MainC;
-	components TDMAMasterC;
+	components TDMALinkC;
 	components SerialPrintfC, SerialStartC;
 
 	TestP.Boot -> MainC;
-	TestP.MasterCtrl -> TDMAMasterC.Control;
-	TestP.MasterRcv -> TDMAMasterC.Receive;
+	TestP.LinkCtrl -> TDMALinkC.Control;
+	TestP.LinkSnd -> TDMALinkC.AMSend;
+	TestP.LinkRcv -> TDMALinkC.Receive;
 }

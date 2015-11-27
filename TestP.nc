@@ -2,25 +2,30 @@
 
 module TestP {
 	uses interface Boot;
-	uses interface SplitControl as MasterCtrl;
-	uses interface Receive as MasterRcv;
+	uses interface SplitControl as LinkCtrl;
+	uses interface AMSend as LinkSnd;
+	uses interface Receive as LinkRcv;
 }
 implementation
 {
 	
 	event void Boot.booted() {
-		call MasterCtrl.start();
+			call LinkCtrl.start();
 	}
 
-	event message_t* MasterRcv.receive(message_t *msg, void *payload, uint8_t len) {
+	event message_t* LinkRcv.receive(message_t *msg, void *payload, uint8_t len) {
+		return msg;
+	}
+
+	event void LinkCtrl.startDone(error_t error) {
 
 	}
 
-	event void MasterCtrl.startDone(error_t error) {
+	event void LinkCtrl.stopDone(error_t error) {
 
 	}
 
-	event void MasterCtrl.stopDone(error_t error) {
+	event void LinkSnd.sendDone(message_t* msg, error_t error) {
 
 	}
 }
