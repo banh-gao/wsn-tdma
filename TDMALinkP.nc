@@ -14,6 +14,7 @@ module TDMALinkP {
 	uses {
 		interface AMPacket;
 		interface SplitControl as AMControl;
+		interface PacketLink;
 
 		interface TimeSyncAMSend<T32khz, uint32_t> as SyncSnd;
 		interface Receive as SyncRcv;
@@ -34,6 +35,7 @@ module TDMALinkP {
 implementation {
 
 	bool isMaster;
+	am_addr_t masterAddr;
 
 	bool syncReceived = FALSE;
 
@@ -56,7 +58,6 @@ implementation {
 	bool joinAnsSending = FALSE;
 
 	// Data packet
-	am_addr_t dataAddr;
 	message_t *dataMsg;
 	uint8_t dataLen;
 	bool dataReady = FALSE;
@@ -76,10 +77,13 @@ implementation {
 		joinReqMsg = call JoinReqSnd.getPayload(&joinAnsBuf, sizeof(JoinReqMsg));
 		joinAnsMsg = call JoinAnsSnd.getPayload(&joinAnsBuf, sizeof(JoinAnsMsg));
 
-		call AMControl.start();
 
 		//Start slot scheduler and schedule first slot
-		call SlotScheduler.start(0, SYNC_SLOT);
+		//FIXME: turn on in specific time slots
+		call AMControl.start();
+		call SlotScheduler.start(5000, SYNC_SLOT);
+		//call SlotScheduler.start(0, SYNC_SLOT);
+
 		//TODO: signal per interfaccia splitcontrol
 		return SUCCESS;
 	}
@@ -147,6 +151,7 @@ implementation {
 		if (!syncSending) {
 			uint32_t epoch_time = call SlotScheduler.getEpochTime();
 			printf("Sending sync beacon with reference time %lu\n", epoch_time);
+			call PacketLink.setRetries(&syncBuf, 0);
 			status = call SyncSnd.send(AM_BROADCAST_ADDR, &syncBuf, sizeof(SyncMsg), epoch_time);
 			if (status == SUCCESS) {
 				syncSending = TRUE;
@@ -167,11 +172,14 @@ implementation {
 		if (length != sizeof(SyncMsg))
 			return msg;
 
+		//Remember master address to send unicast messages
+		masterAddr = call AMPacket.source(msg);
+
 		if (call TSPacket.isValid(msg) && length == sizeof(SyncMsg)) {
 			uint32_t ref_time = call TSPacket.eventTime(msg);
 			// synchronize the epoch start time (converted to our local time reference frame)
-			printf("Synchonizing slot scheduler with new master time %lu (was %lu)\n",ref_time, call SlotScheduler.getEpochTime());
 			call SlotScheduler.syncEpochTime(ref_time);
+			printf("Local scheduler synchronized with master scheduler\n");
 			syncReceived = TRUE;
 		}
 
@@ -181,8 +189,8 @@ implementation {
 	void sendJoinRequest() {
 		error_t status;
 		if (!joinReqSending) {
-			printf("Sending join request\n");
-			status = call JoinReqSnd.send(AM_BROADCAST_ADDR, &joinReqBuf, sizeof(JoinReqMsg));
+			printf("Sending join request to master %d\n", masterAddr);
+			status = call JoinReqSnd.send(masterAddr, &joinReqBuf, sizeof(JoinReqMsg));
 			if (status == SUCCESS) {
 				joinReqSending = TRUE;
 			} else {
@@ -257,7 +265,7 @@ implementation {
 	void sendData() {
 		if(dataReady) {
 			printf("Sending data\n");
-			call DataSnd.send(dataAddr, dataMsg, dataLen);
+			call DataSnd.send(masterAddr, dataMsg, dataLen);
 		} else {
 			printf("No data to transmit\n");
 		}
@@ -279,7 +287,6 @@ implementation {
 		if(dataReady)
 			return BUSY;
 
-		dataAddr = addr;
 		dataMsg = msg;
 		dataLen = len;
 

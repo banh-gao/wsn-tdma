@@ -8,10 +8,11 @@ implementation {
 	components TDMALinkP as Impl;
 	components SerialPrintfC, SerialStartC;
 
-	//Radio control
-	components ActiveMessageC;
+	//Radio link control
+	components ActiveMessageC, PacketLinkC;
 	Impl.AMPacket -> ActiveMessageC;
 	Impl.AMControl -> ActiveMessageC.SplitControl;
+	Impl.PacketLink -> PacketLinkC;
 
 	//Sync beacon
 	components CC2420TimeSyncMessageC as TSAM;
