@@ -5,7 +5,6 @@
 
 #define SYNC_SLOT 0
 #define JOIN_SLOT 1
-#define RESYNC_SLOT N_SLOTS //Slots numbers >= N_SLOTS causes the scheduler to stop, it needs to be restarted
 
 #define RESYNC_THRESHOLD 5
 
@@ -48,6 +47,7 @@ implementation {
 
 	//Slave
 	am_addr_t masterAddr;
+	bool syncMode;
 	bool syncReceived = FALSE;
 	uint8_t missedSyncCount = 0; //Start node in resync mode
 	bool hasJoined = FALSE;
@@ -87,11 +87,13 @@ implementation {
 	command error_t Control.start() {
 		isMaster = (TOS_NODE_ID == 1);
 
+		//Start in sync mode only for slaves
+		syncMode = !(isMaster);
+
+
 		syncMsg = call SyncSnd.getPayload(&joinAnsBuf, sizeof(SyncMsg));
 		joinReqMsg = call JoinReqSnd.getPayload(&joinAnsBuf, sizeof(JoinReqMsg));
 		joinAnsMsg = call JoinAnsSnd.getPayload(&joinAnsBuf, sizeof(JoinAnsMsg));
-
-
 
 		//TODO: turn on only in specific time slots
 		call AMControl.start();
@@ -145,13 +147,14 @@ implementation {
 
 		nextSlot = (isMaster) ? getNextMasterSlot(slot) : getNextSlaveSlot(slot);
 
-		//TODO: turn off radio if needed
-
-		
-		if(nextSlot == RESYNC_SLOT) {
-			printf("DEBUG: Going in RESYNC MODE\n");
-			//TODO: go to resync mode
+		//In sync mode the radio is always on
+		if(syncMode) {
+			printf("DEBUG: Starting RESYNC MODE\n");
+			call SlotScheduler.stop();
+			return SYNC_SLOT;
 		}
+
+		//TODO: turn off radio if needed
 
 		return nextSlot;
 	}
@@ -174,12 +177,11 @@ implementation {
 	uint8_t getNextSlaveSlot(uint8_t slot) {
 		if(slot == SYNC_SLOT && syncReceived == FALSE) {
 			missedSyncCount++;
-			printf("Missed sync %d/%d\n", missedSyncCount, RESYNC_THRESHOLD);
+			printf("DEBUG: Missed sync beacon %d/%d\n", missedSyncCount, RESYNC_THRESHOLD);
 
 			//Go to resync mode, returning RESYNC_SLOT stops the scheduler
 			if(missedSyncCount >= RESYNC_THRESHOLD) {
-				printf("DEBUG: RESYNC MODE\n");
-				//FIMXE: set to RESYNC_SLOT
+				syncMode = TRUE;
 				return SYNC_SLOT;
 			}
 		}
@@ -227,20 +229,32 @@ implementation {
 	}
 
 	event message_t* SyncRcv.receive(message_t* msg, void* payload, uint8_t length) {
+		uint32_t ref_time;
 		if (length != sizeof(SyncMsg))
 			return msg;
 
 		//Remember master address to send unicast messages
 		masterAddr = call AMPacket.source(msg);
 
-		if (call TSPacket.isValid(msg) && length == sizeof(SyncMsg)) {
-			uint32_t ref_time = call TSPacket.eventTime(msg);
-			// synchronize the epoch start time (converted to our local time reference frame)
+		//Invalid sync message
+		if (call TSPacket.isValid(msg) == FALSE || length != sizeof(SyncMsg))
+			return msg;
+
+		ref_time = call TSPacket.eventTime(msg);
+
+		//If sync mode was active restart the slot scheduler, otherwise just synchronize it
+		if(syncMode) {
+			printf("DEBUG: Starting SLOTTED MODE\n");
+			syncMode = FALSE;
+			printf("DEBUG: Local scheduler started with master scheduler\n");
+			call SlotScheduler.start(ref_time,SYNC_SLOT);
+		} else {
+			printf("DEBUG: Local scheduler synchronized with master scheduler\n");
 			call SlotScheduler.syncEpochTime(ref_time);
-			printf("DEBUG: Local scheduler synchronized with master scheduler (slot %d)\n", call SlotScheduler.getScheduledSlot());
-			syncReceived = TRUE;
-			missedSyncCount = 0;
 		}
+
+		syncReceived = TRUE;
+		missedSyncCount = 0;
 
 		return msg;
 	}

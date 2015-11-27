@@ -84,10 +84,9 @@ implementation {
 	event void EndSlotTimer.fired() {
 		uint8_t nextSlot = signal SlotScheduler.slotEnded(schedSlot);
 
-		if(nextSlot >= N_SLOTS) {
-			call SlotScheduler.stop();
+		//If scheduler is not running don't schedule other slots
+		if(!isStarted)
 			return;
-		}
 
 		if (nextSlot > schedSlot) {
 			schedSlot = nextSlot;
