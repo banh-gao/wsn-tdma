@@ -1,10 +1,7 @@
-//#include <Timer.h>
-
-configuration SlotSchedulerC {
+generic configuration SlotSchedulerC(uint32_t slotDuration, uint8_t maxSlots) {
 	provides interface SlotScheduler;
-}
-implementation {
-	components SlotSchedulerP;
+} implementation {
+	components new SlotSchedulerP(slotDuration, maxSlots);
 	components new Timer32C() as EpochTimer;
 	components new Timer32C() as StartSlotTimer;
 	components new Timer32C() as EndSlotTimer;

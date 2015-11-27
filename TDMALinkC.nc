@@ -1,10 +1,16 @@
+#ifndef SLOT_DURATION
+#error SLOT_DURATION not set
+#endif
+
+#ifndef N_SLOTS
+#error N_SLOTS not set
+#endif
+
 configuration TDMALinkC {
 	provides interface SplitControl as Control;
 	provides interface Receive;
 	provides interface AMSend;
-}
-
-implementation {
+} implementation {
 	components TDMALinkP as Impl;
 	components SerialPrintfC, SerialStartC;
 
@@ -36,7 +42,7 @@ implementation {
 	Impl.DataSnd -> DataSndC;
 
 	//Slot scheduler
-	components SlotSchedulerC;
+	components new SlotSchedulerC(SLOT_DURATION, N_SLOTS);
 	Impl.SlotScheduler -> SlotSchedulerC;
 
 	//Export interface for incoming data messages

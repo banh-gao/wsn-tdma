@@ -32,9 +32,7 @@ module TDMALinkP {
 
 		interface SlotScheduler;
 	}
-}
-
-implementation {
+} implementation {
 
 	//Control
 	bool isStarted = FALSE;

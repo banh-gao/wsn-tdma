@@ -1,20 +1,6 @@
 #include <Timer.h>
-#include <printf.h>
 
-////// TDMA time params ///////
-#ifndef SLOT_DURATION
-#define SECOND 32768L
-#define SLOT_DURATION (SECOND/10)
-#endif
-
-#ifndef N_SLOTS
-#define N_SLOTS 10
-#endif
-///////////////////////////////
-
-#define EPOCH_DURATION (SLOT_DURATION * N_SLOTS)
-
-module SlotSchedulerP {
+generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlots) {
 	provides interface SlotScheduler;
 
 	uses {
@@ -22,9 +8,10 @@ module SlotSchedulerP {
 		interface Timer<T32khz> as StartSlotTimer;
 		interface Timer<T32khz> as EndSlotTimer;
 	}
-}
+} implementation {
 
-implementation {
+	//Defined at compile time
+	uint32_t epochDuration = slotDuration * maxSlots;
 
 	bool isStarted = FALSE;
 	uint32_t epoch_reference_time;
@@ -33,16 +20,17 @@ implementation {
 	command error_t SlotScheduler.start(uint32_t epoch_time, uint8_t firstSlot) {
 		if(isStarted == TRUE) {
 			return EALREADY;
-		} if(firstSlot >= N_SLOTS)
+		} if(firstSlot >= maxSlots)
 			return FAIL;
 
-		isStarted = TRUE;
+		epochDuration = slotDuration * maxSlots;
 
+		isStarted = TRUE;
 		schedSlot = firstSlot;
 		epoch_reference_time = epoch_time;
 
-		call StartSlotTimer.startOneShotAt(epoch_time, SLOT_DURATION * firstSlot);
-		call EpochTimer.startPeriodicAt(epoch_time, EPOCH_DURATION);
+		call StartSlotTimer.startOneShotAt(epoch_time, slotDuration * firstSlot);
+		call EpochTimer.startPeriodicAt(epoch_time, epochDuration);
 
 		return SUCCESS;
 	}
@@ -61,7 +49,7 @@ implementation {
 
 	command void SlotScheduler.syncEpochTime(uint32_t reference_time) {
 		epoch_reference_time = reference_time;
-		call EpochTimer.startPeriodicAt(reference_time, EPOCH_DURATION);
+		call EpochTimer.startPeriodicAt(reference_time, epochDuration);
 	}
 
 	command uint32_t SlotScheduler.getEpochTime() {
@@ -73,11 +61,11 @@ implementation {
 	}
 
 	event void EpochTimer.fired() {
-		epoch_reference_time += EPOCH_DURATION;
+		epoch_reference_time += epochDuration;
 	}
 
 	event void StartSlotTimer.fired() {
-		call EndSlotTimer.startOneShot(SLOT_DURATION);
+		call EndSlotTimer.startOneShot(slotDuration);
 		signal SlotScheduler.slotStarted(schedSlot);
 	}
 
@@ -90,10 +78,10 @@ implementation {
 
 		if (nextSlot > schedSlot) {
 			schedSlot = nextSlot;
-			call StartSlotTimer.startOneShotAt(epoch_reference_time, SLOT_DURATION * schedSlot);
+			call StartSlotTimer.startOneShotAt(epoch_reference_time, slotDuration * schedSlot);
 		} else {
 			schedSlot = nextSlot;
-			call StartSlotTimer.startOneShotAt(epoch_reference_time + EPOCH_DURATION, SLOT_DURATION * schedSlot);
+			call StartSlotTimer.startOneShotAt(epoch_reference_time + epochDuration, slotDuration * schedSlot);
 		}
 	}
 }
