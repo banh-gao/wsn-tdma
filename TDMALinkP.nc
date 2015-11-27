@@ -7,8 +7,9 @@
 #define JOIN_SLOT 1
 
 #define RESYNC_THRESHOLD 5
-#define JOIN_RETRY 3
-#define DATA_RETRY 3
+
+#define DATA_RETRY 1
+#define DATA_RETRY_DELAY SLOT_DURATION/2
 
 module TDMALinkP {
 	provides interface SplitControl as Control;
@@ -23,6 +24,9 @@ module TDMALinkP {
 		interface TimeSyncAMSend<T32khz, uint32_t> as SyncSnd;
 		interface Receive as SyncRcv;
         interface TimeSyncPacket<T32khz, uint32_t> as TSPacket;
+
+		interface Random as JoinReqRandom;
+		interface Timer<T32khz> as JoinReqDelayTimer;
 
 		interface AMSend as JoinReqSnd;
 		interface Receive as JoinReqRcv;
@@ -80,7 +84,6 @@ module TDMALinkP {
 	message_t joinAnsBuf;
 	JoinAnsMsg* joinAnsMsg;
 	bool joinAnsSending = FALSE;
-
 
 	command error_t Control.start() {
 		isMaster = (TOS_NODE_ID == 1);
@@ -192,8 +195,10 @@ module TDMALinkP {
 			return JOIN_SLOT;
 
 		//If join failed, retry in the next epoch
-		if(slot == JOIN_SLOT && hasJoined == FALSE)
+		if(slot == JOIN_SLOT && hasJoined == FALSE) {
+			printf("DEBUG: Join failed\n");
 			return SYNC_SLOT;
+		}
 
 		//Reschedule for sync in next epoch
 		if(slot == assignedSlot)
@@ -279,10 +284,16 @@ module TDMALinkP {
 	}
 
 	void sendJoinRequest() {
+		uint32_t delay = call JoinReqRandom.rand16() % (SLOT_DURATION / 2);
+		printf("DELAY: %lu\n", delay);
+		call JoinReqDelayTimer.startOneShot(delay);
+	}
+
+	event void JoinReqDelayTimer.fired() {
 		error_t status;
 		if (!joinReqSending) {
 			printf("DEBUG: Sending join request to master %d\n", masterAddr);
-			call PacketLink.setRetries(&joinReqBuf, JOIN_RETRY);
+			call PacketLink.setRetries(&joinReqBuf, 0);
 			status = call JoinReqSnd.send(masterAddr, &joinReqBuf, sizeof(JoinReqMsg));
 			if (status == SUCCESS) {
 				joinReqSending = TRUE;
@@ -299,21 +310,19 @@ module TDMALinkP {
 		}
 	}
 
-	event message_t* JoinReqRcv.receive(message_t* msg, void* payload, uint8_t length) {
-		am_addr_t from;		
+	event message_t* JoinReqRcv.receive(message_t* msg, void* payload, uint8_t length) {		
+		am_addr_t slave;
 		if (length != sizeof(JoinReqMsg))
 			return msg;
 
-		joinReqMsg = (JoinReqMsg*) payload;
+		slave = call AMPacket.source(msg);
 
-		from = call AMPacket.source(msg);
-
-		printf("DEBUG: Join request received from %d\n", from);
+		printf("DEBUG: Join request received from %d\n", slave);
 		
 		//Send answer only if there are slots available
-		if(nextFreeSlotPos < N_SLOTS-2)
-			sendJoinAnswer(from, allocateSlot(from));
-		else
+		if(nextFreeSlotPos < N_SLOTS-2) {
+			sendJoinAnswer(slave, allocateSlot(slave));
+		} else
 			printf("WARNING: No slots available\n");
 
 		return msg;
@@ -336,12 +345,12 @@ module TDMALinkP {
 		if (!joinReqSending) {
 			joinAnsMsg->slot = slot;
 			printf("DEBUG: Sending join answer to %d\n", slave);
-			call PacketLink.setRetries(&joinAnsBuf, JOIN_RETRY);
+			call PacketLink.setRetries(&joinAnsBuf, 0);
 			status = call JoinAnsSnd.send(slave, &joinAnsBuf, sizeof(JoinAnsMsg));
 			if (status == SUCCESS) {
 				joinAnsSending = TRUE;
 			} else {
-				printf("DEBUG: Join answer sending failed\n");
+				printf("DEBUG: Join answer to %d sending failed\n", slave);
 			}
 		}
 	}
@@ -378,7 +387,8 @@ module TDMALinkP {
 	void sendData() {
 		if(dataReady) {
 			printf("DEBUG: Sending data\n");
-			call PacketLink.setRetries(&joinReqBuf, DATA_RETRY);
+			call PacketLink.setRetries(dataMsg, DATA_RETRY);
+			call PacketLink.setRetryDelay(dataMsg, DATA_RETRY_DELAY);
 			call DataSnd.send(masterAddr, dataMsg, dataLen);
 		} else {
 			printf("DEBUG: No data to transmit\n");

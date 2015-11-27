@@ -27,6 +27,11 @@ configuration TDMALinkC {
 	Impl.SyncRcv -> TSAM.Receive[AM_SYNCMSG];
 
 	//Join messages
+	components RandomC as JoinReqRandom;
+	components new Timer32C() as JoinReqDelayTimer;
+	Impl.JoinReqRandom -> JoinReqRandom;
+	Impl.JoinReqDelayTimer -> JoinReqDelayTimer;
+
 	components new AMSenderC(AM_JOINREQMSG) as JoinReqSndC;
 	components new AMReceiverC(AM_JOINREQMSG) as JoinReqRcvC;
 	Impl.JoinReqSnd -> JoinReqSndC;
