@@ -38,6 +38,7 @@ implementation {
 
 	//Control
 	bool isStarted = FALSE;
+	bool isStopped = FALSE;
 	bool isMaster;
 
 	//Master
@@ -48,6 +49,7 @@ implementation {
 	void sendSyncBeacon();
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot);
 	uint8_t getNextMasterSlot(uint8_t slot);
+	bool getMasterRadioOff(uint8_t current, uint8_t next);
 
 	//Slave
 	am_addr_t masterAddr;
@@ -59,6 +61,7 @@ implementation {
 	void sendJoinRequest();
 	void sendData();
 	uint8_t getNextSlaveSlot(uint8_t slot);
+	bool getSlaveRadioOff(uint8_t current, uint8_t next);
 	bool dataReady = FALSE;
 	// Outgoing data packet
 	message_t *dataMsg;
@@ -89,7 +92,7 @@ implementation {
 
 		if(isMaster) {
 			syncMode = FALSE;
-			//Start slot scheduler
+			//Start slot scheduler now
 			call SlotScheduler.start(0, SYNC_SLOT);
 		} else {
 			//Scheduler is activated only after successful synchronization
@@ -103,25 +106,26 @@ implementation {
 	}
 
 	command error_t Control.stop() {
-		//TODO: signal per interfaccia splitcontrol
+		call SlotScheduler.stop();
+		call AMControl.stop();
+		isStarted = FALSE;
 		return SUCCESS;
 	}
 
 	event void SlotScheduler.slotStarted(uint8_t slot) {
 		printf("DEBUG: Slot %d started\n", slot);
 
-		//TODO: turn on radio if needed
-
-		//TODO: move to radio startDone
+		//TODO: move all to radio startDone
 		if(isMaster) {
 			if(slot == SYNC_SLOT)
 				sendSyncBeacon();
 			return;
+			//TODO: turn on radio for join listen and allocate slots (if slot is started radio has always to be turned on)
 		}
 
 		if(slot == SYNC_SLOT)
 			syncReceived = FALSE;
-			//TODO: Listen for sync
+			//TODO: turn on radio for sync listening
 		else if (slot == JOIN_SLOT)
 			sendJoinRequest();
 		else
@@ -131,7 +135,7 @@ implementation {
 	event void AMControl.startDone(error_t err) {
 		printf("DEBUG: Radio ON\n");
 
-		//Signal to user that master is ready only when radio is on for the first time
+		//FOR CONTROL INTERFACE: Signal that master is ready only when radio is on for the first time
 		if(isMaster && isStarted == FALSE) {
 				isStarted = TRUE;
 				signal Control.startDone(SUCCESS);
@@ -140,18 +144,21 @@ implementation {
 
 	event uint8_t SlotScheduler.slotEnded(uint8_t slot) {
 		uint8_t nextSlot;
+		bool radioOff;
 		printf("DEBUG: Slot %d ended\n", slot);
 
 		nextSlot = (isMaster) ? getNextMasterSlot(slot) : getNextSlaveSlot(slot);
 
-		//In sync mode the radio is always on
+		//In sync mode the radio is always on and scheduler is not running
 		if(syncMode) {
 			printf("DEBUG: Entering SYNC MODE\n");
 			call SlotScheduler.stop();
 			return SYNC_SLOT;
 		}
 
-		//TODO: turn off radio if needed
+		radioOff = (isMaster) ? getMasterRadioOff(slot, nextSlot) : getSlaveRadioOff(slot, nextSlot);
+		if(radioOff)
+			call AMControl.stop();
 
 		return nextSlot;
 	}
@@ -174,7 +181,7 @@ implementation {
 	uint8_t getNextSlaveSlot(uint8_t slot) {
 		if(slot == SYNC_SLOT && syncReceived == FALSE) {
 			missedSyncCount++;
-			printf("DEBUG: Missed sync beacon %d/%d\n", missedSyncCount, RESYNC_THRESHOLD);
+			printf("DEBUG: Missed synchronization beacon %d/%d\n", missedSyncCount, RESYNC_THRESHOLD);
 
 			//Go to resync mode, returning RESYNC_SLOT stops the scheduler
 			if(missedSyncCount >= RESYNC_THRESHOLD) {
@@ -199,21 +206,32 @@ implementation {
 		return assignedSlot;
 	}
 
+	bool getMasterRadioOff(uint8_t current, uint8_t next) {
+		return FALSE;
+	}
+
+	bool getSlaveRadioOff(uint8_t current, uint8_t next) {
+		return FALSE;
+	}
+
 	event void AMControl.stopDone(error_t err) {
 		printf("DEBUG: Radio OFF\n");
+
+		//FOR CONTROL INTERFACE: Signal that component has stopped
+		if(isStarted == FALSE)
+			signal Control.stopDone(SUCCESS);
 	}
 
 	void sendSyncBeacon() {
 		error_t status;
 		if (!syncSending) {
-			uint32_t epoch_time = call SlotScheduler.getEpochTime();
-			printf("DEBUG: Sending sync beacon with reference time %lu\n", epoch_time);
+			printf("DEBUG: Sending synchronization beacon\n");
 			call PacketLink.setRetries(&syncBuf, 0);
-			status = call SyncSnd.send(AM_BROADCAST_ADDR, &syncBuf, sizeof(SyncMsg), epoch_time);
+			status = call SyncSnd.send(AM_BROADCAST_ADDR, &syncBuf, sizeof(SyncMsg), call SlotScheduler.getEpochTime());
 			if (status == SUCCESS) {
 				syncSending = TRUE;
 			} else {
-				printf("DEBUG: Sync beacon sending failed\n");
+				printf("DEBUG: Synchronization beacon sending failed\n");
 			}
 		}
 	}
@@ -221,7 +239,7 @@ implementation {
 	event void SyncSnd.sendDone(message_t* msg, error_t error) {
 		syncSending = FALSE;
 		if (error != SUCCESS) {
-			printf("DEBUG: Sync beacon transmission failed\n");
+			printf("DEBUG: Synchronization beacon transmission failed\n");
 		}
 	}
 
@@ -239,15 +257,22 @@ implementation {
 
 		ref_time = call TSPacket.eventTime(msg);
 
-		//If sync mode was active restart the slot scheduler, otherwise just synchronize it
 		if(syncMode) {
-			printf("DEBUG: Entering SLOTTED MODE\n");
-			syncMode = FALSE;
-			printf("DEBUG: Local scheduler started with master scheduler\n");
-			call SlotScheduler.start(ref_time,SYNC_SLOT);
+			//If sync mode was active switch to slotted mode
+			syncMode = FALSE;		
+			if(hasJoined) {
+				//Already joined, just desynchronized
+				call SlotScheduler.start(ref_time, assignedSlot);
+			} else {
+				//Join phase never completed
+				call SlotScheduler.start(ref_time, JOIN_SLOT);
+			}
+			printf("DEBUG: Local scheduler started and synchronized with master scheduler\n");
+			printf("DEBUG: Entering SLOTTED MODE\n");	
 		} else {
-			printf("DEBUG: Local scheduler synchronized with master scheduler\n");
+			//Synchronize the running scheduler
 			call SlotScheduler.syncEpochTime(ref_time);
+			printf("DEBUG: Local scheduler synchronized with master scheduler\n");
 		}
 
 		syncReceived = TRUE;
@@ -343,7 +368,7 @@ implementation {
 		
 		hasJoined = TRUE;
 
-		//Signal to user that slave is ready only when it has joined
+		//FOR CONTROL INTERFACE: Signal that slave is ready
 		isStarted = TRUE;
 		signal Control.startDone(SUCCESS);
 
