@@ -44,14 +44,25 @@ implementation {
 	am_addr_t allocatedSlots[N_SLOTS];
 	int nextFreeSlot = 2;
 	int nextListenDataSlot = 2;
+	uint8_t allocateSlot(am_addr_t slave);
+	void sendSyncBeacon();
+	void sendJoinAnswer(am_addr_t slave, uint8_t slot);
+	uint8_t getNextMasterSlot(uint8_t slot);
 
 	//Slave
 	am_addr_t masterAddr;
 	bool syncMode;
 	bool syncReceived = FALSE;
-	uint8_t missedSyncCount = 0; //Start node in resync mode
+	uint8_t missedSyncCount = 0;
 	bool hasJoined = FALSE;
 	uint8_t assignedSlot;
+	void sendJoinRequest();
+	void sendData();
+	uint8_t getNextSlaveSlot(uint8_t slot);
+	bool dataReady = FALSE;
+	// Outgoing data packet
+	message_t *dataMsg;
+	uint8_t dataLen;
 
 	// Sync beacon packet
 	SyncMsg* syncMsg;
@@ -68,39 +79,25 @@ implementation {
 	JoinAnsMsg* joinAnsMsg;
 	bool joinAnsSending = FALSE;
 
-	// Data packet
-	message_t *dataMsg;
-	uint8_t dataLen;
-	bool dataReady = FALSE;
-
-	// MASTER
-	uint8_t allocateSlot(am_addr_t slave);
-	void sendSyncBeacon();
-	void sendJoinAnswer(am_addr_t slave, uint8_t slot);
-	uint8_t getNextMasterSlot(uint8_t slot);
-
-	// SLAVE
-	void sendJoinRequest();
-	void sendData();
-	uint8_t getNextSlaveSlot(uint8_t slot);
 
 	command error_t Control.start() {
 		isMaster = (TOS_NODE_ID == 1);
-
-		//Start in sync mode only for slaves
-		syncMode = !(isMaster);
-
 
 		syncMsg = call SyncSnd.getPayload(&joinAnsBuf, sizeof(SyncMsg));
 		joinReqMsg = call JoinReqSnd.getPayload(&joinAnsBuf, sizeof(JoinReqMsg));
 		joinAnsMsg = call JoinAnsSnd.getPayload(&joinAnsBuf, sizeof(JoinAnsMsg));
 
-		//TODO: turn on only in specific time slots
+		if(isMaster) {
+			syncMode = FALSE;
+			//Start slot scheduler
+			call SlotScheduler.start(0, SYNC_SLOT);
+		} else {
+			//Scheduler is activated only after successful synchronization
+			syncMode = TRUE;
+			printf("DEBUG: Entering SYNC MODE\n");
+		}
+		
 		call AMControl.start();
-
-		//TODO: for slaves start scheduler only after success sync
-		//Start slot scheduler and schedule first slot
-		call SlotScheduler.start(0, SYNC_SLOT);
 
 		return SUCCESS;
 	}
@@ -149,7 +146,7 @@ implementation {
 
 		//In sync mode the radio is always on
 		if(syncMode) {
-			printf("DEBUG: Starting RESYNC MODE\n");
+			printf("DEBUG: Entering SYNC MODE\n");
 			call SlotScheduler.stop();
 			return SYNC_SLOT;
 		}
@@ -244,7 +241,7 @@ implementation {
 
 		//If sync mode was active restart the slot scheduler, otherwise just synchronize it
 		if(syncMode) {
-			printf("DEBUG: Starting SLOTTED MODE\n");
+			printf("DEBUG: Entering SLOTTED MODE\n");
 			syncMode = FALSE;
 			printf("DEBUG: Local scheduler started with master scheduler\n");
 			call SlotScheduler.start(ref_time,SYNC_SLOT);
@@ -353,7 +350,8 @@ implementation {
 		return msg;
 	}
 
-	///////////////////// SLAVE DATA TRANSMISSION INTERFACE ////////////////////
+	///////////////////////////////////////////////////////////////////////////////////
+	////////////////////// DATA TRANSMISSION INTERFACE FOR SLAVES /////////////////////
 
 	void sendData() {
 		if(dataReady) {
