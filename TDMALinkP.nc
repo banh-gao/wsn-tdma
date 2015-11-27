@@ -7,6 +7,8 @@
 #define JOIN_SLOT 1
 
 #define RESYNC_THRESHOLD 5
+#define JOIN_RETRY 3
+#define DATA_RETRY 3
 
 module TDMALinkP {
 	provides interface SplitControl as Control;
@@ -40,9 +42,8 @@ module TDMALinkP {
 	bool isMaster;
 
 	//Master
-	am_addr_t allocatedSlots[N_SLOTS];
-	int nextFreeSlot = 2;
-	int nextListenDataSlot = 2;
+	am_addr_t allocatedSlots[N_SLOTS-2];
+	uint8_t nextFreeSlotPos = 0;
 	uint8_t allocateSlot(am_addr_t slave);
 	void sendSyncBeacon();
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot);
@@ -166,13 +167,11 @@ module TDMALinkP {
 		if(slot == SYNC_SLOT)
 			return JOIN_SLOT;
 
-		//Schedule for next allocated data slot and increment
-		if(nextListenDataSlot < nextFreeSlot)
-			return nextListenDataSlot++;
+		//Schedule for next allocated data slot
+		if(slot < nextFreeSlotPos+2)
+			return slot+1;
 
-		nextListenDataSlot = 2;
-
-		//No more data slots to listen to, schedule for sync beaconing
+		//No more allocated data slots to listen to, schedule for next epoch sync beaconing
 		return SYNC_SLOT;
 	}
 
@@ -283,6 +282,7 @@ module TDMALinkP {
 		error_t status;
 		if (!joinReqSending) {
 			printf("DEBUG: Sending join request to master %d\n", masterAddr);
+			call PacketLink.setRetries(&joinReqBuf, JOIN_RETRY);
 			status = call JoinReqSnd.send(masterAddr, &joinReqBuf, sizeof(JoinReqMsg));
 			if (status == SUCCESS) {
 				joinReqSending = TRUE;
@@ -301,7 +301,6 @@ module TDMALinkP {
 
 	event message_t* JoinReqRcv.receive(message_t* msg, void* payload, uint8_t length) {
 		am_addr_t from;		
-		uint8_t slot;
 		if (length != sizeof(JoinReqMsg))
 			return msg;
 
@@ -310,27 +309,26 @@ module TDMALinkP {
 		from = call AMPacket.source(msg);
 
 		printf("DEBUG: Join request received from %d\n", from);
-
-		//FIXME: Allocate slot only after receiving answer ACK
-		slot = allocateSlot(from);
 		
-		//Only slots greater than 1 can be allocated to slaves
-		if(slot > 1)
-			sendJoinAnswer(from, slot);
+		//Send answer only if there are slots available
+		if(nextFreeSlotPos < N_SLOTS-2)
+			sendJoinAnswer(from, allocateSlot(from));
 		else
-			printf("DEBUG: No slots available");
+			printf("WARNING: No slots available\n");
 
 		return msg;
 	}
 
 	uint8_t allocateSlot(am_addr_t slave) {
-		uint8_t allocated;
-		if(nextFreeSlot > N_SLOTS)
-			return 0;
+		int slot;
+		//Check if slot was already allocated to the node
+		for(slot=0;slot<N_SLOTS-2;slot++) {
+			if(allocatedSlots[slot] == slave)
+				return slot+2;
+		}
 
-		allocated = nextFreeSlot;
-		allocatedSlots[nextFreeSlot++] = slave;
-		return allocated;
+		allocatedSlots[nextFreeSlotPos] = slave;
+		return (nextFreeSlotPos++)-2;
 	}
 
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot) {
@@ -338,6 +336,7 @@ module TDMALinkP {
 		if (!joinReqSending) {
 			joinAnsMsg->slot = slot;
 			printf("DEBUG: Sending join answer to %d\n", slave);
+			call PacketLink.setRetries(&joinAnsBuf, JOIN_RETRY);
 			status = call JoinAnsSnd.send(slave, &joinAnsBuf, sizeof(JoinAnsMsg));
 			if (status == SUCCESS) {
 				joinAnsSending = TRUE;
@@ -379,6 +378,7 @@ module TDMALinkP {
 	void sendData() {
 		if(dataReady) {
 			printf("DEBUG: Sending data\n");
+			call PacketLink.setRetries(&joinReqBuf, DATA_RETRY);
 			call DataSnd.send(masterAddr, dataMsg, dataLen);
 		} else {
 			printf("DEBUG: No data to transmit\n");
