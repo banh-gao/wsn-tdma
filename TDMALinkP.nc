@@ -35,10 +35,15 @@ module TDMALinkP {
 implementation {
 
 	bool isMaster;
+
+	//Master
+	am_addr_t allocatedSlots[N_SLOTS];
+	int nextFreeSlot = 2;
+	int nextListenDataSlot = 0;
+
+	//Slave
 	am_addr_t masterAddr;
-
 	bool syncReceived = FALSE;
-
 	bool hasJoined = FALSE;
 	uint8_t assignedSlot;
 
@@ -65,6 +70,7 @@ implementation {
 	void startListen();
 	void stopListen();
 
+	uint8_t allocateSlot(am_addr_t slave);
 	void sendSyncBeacon();
 	void sendJoinRequest();
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot);
@@ -118,9 +124,17 @@ implementation {
 		if(isMaster) {
 			if(slot == SYNC_SLOT)
 				return JOIN_SLOT;
-			else if(slot == JOIN_SLOT)
-				return 7; //FIXME: schedule data listening slot
-			else
+			else if(slot >= JOIN_SLOT) {
+				//Listen for allocated data slots
+				if(nextFreeSlot > 1) {
+					if(nextListenDataSlot == nextFreeSlot) {
+						nextListenDataSlot = 2;
+						return SYNC_SLOT;
+					} else {
+						return nextListenDataSlot++;
+					}
+				}
+			} else
 				return SYNC_SLOT;
 		}
 
@@ -208,6 +222,7 @@ implementation {
 
 	event message_t* JoinReqRcv.receive(message_t* msg, void* payload, uint8_t length) {
 		am_addr_t from;		
+		uint8_t slot;
 		if (length != sizeof(JoinReqMsg))
 			return msg;
 
@@ -217,11 +232,26 @@ implementation {
 
 		printf("Join request received from %d\n", from);
 
-		//TODO: Allocate slot
-
-		sendJoinAnswer(from, 7);
+		//FIXME: Allocate slot only after receiving answer ACK
+		slot = allocateSlot(from);
+		
+		//Only slots greater than 1 can be allocated to slaves
+		if(slot > 1)
+			sendJoinAnswer(from, slot);
+		else
+			printf("No slots available");
 
 		return msg;
+	}
+
+	uint8_t allocateSlot(am_addr_t slave) {
+		uint8_t allocated;
+		if(nextFreeSlot > N_SLOTS)
+			return 0;
+
+		allocated = nextFreeSlot;
+		allocatedSlots[nextFreeSlot++] = slave;
+		return allocated;
 	}
 
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot) {
