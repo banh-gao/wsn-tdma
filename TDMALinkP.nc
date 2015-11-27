@@ -37,6 +37,8 @@ module TDMALinkP {
 
 implementation {
 
+	//Control
+	bool isStarted = FALSE;
 	bool isMaster;
 
 	//Master
@@ -93,10 +95,9 @@ implementation {
 		//Start slot scheduler and schedule first slot
 		//TODO: turn on in specific time slots
 		call AMControl.start();
-		call SlotScheduler.start(5000, SYNC_SLOT);
+		call SlotScheduler.start(0, SYNC_SLOT);
 		//call SlotScheduler.start(0, SYNC_SLOT);
 
-		//TODO: signal per interfaccia splitcontrol
 		return SUCCESS;
 	}
 
@@ -106,7 +107,7 @@ implementation {
 	}
 
 	event void SlotScheduler.slotStarted(uint8_t slot) {
-		printf("Slot %d started\n", slot);
+		printf("DEBUG: Slot %d started\n", slot);
 
 		//TODO: turn on radio if needed
 
@@ -127,12 +128,17 @@ implementation {
 	}
 
 	event void AMControl.startDone(error_t err) {
-		printf("Radio ON\n");
+		//Signal master ready when radio is on for the first time
+		if(isMaster && isStarted == FALSE) {
+				isStarted = TRUE;
+				signal Control.startDone(SUCCESS);
+		}
+		printf("DEBUG: Radio ON\n");
 	}
 
 	event uint8_t SlotScheduler.slotEnded(uint8_t slot) {
 		uint8_t nextSlot;
-		printf("Slot %d ended\n", slot);
+		printf("DEBUG: Slot %d ended\n", slot);
 
 		nextSlot = (isMaster) ? getNextMasterSlot(slot) : getNextSlaveSlot(slot);
 
@@ -140,7 +146,7 @@ implementation {
 
 		if(nextSlot == RESYNC_SLOT) {
 				missedSyncCount = 0;
-				printf("Going in RESYNC MODE\n");
+				printf("DEBUG: Going in RESYNC MODE\n");
 				//TODO: go to resync mode
 		}
 
@@ -163,7 +169,7 @@ implementation {
 	}
 
 	uint8_t getNextSlaveSlot(uint8_t slot) {
-		//Sync beacon missed, decide if to go to resync mode
+		/* TODO Sync beacon missed, decide if to go to resync mode
 		if(slot == SYNC_SLOT && syncReceived == FALSE) {
 			missedSyncCount++;
 
@@ -171,7 +177,7 @@ implementation {
 			if(missedSyncCount > RESYNC_THRESHOLD)
 				//FIMXE: set to RESYNC_SLOT
 				return SYNC_SLOT;
-		}
+		} */
 
 		//If node needs to join try to join in next slot
 		if(slot == SYNC_SLOT && hasJoined == FALSE)
@@ -181,25 +187,29 @@ implementation {
 		if(slot == JOIN_SLOT && hasJoined == FALSE)
 			return SYNC_SLOT;
 
+		//Reschedule for sync in next epoch
+		if(slot == assignedSlot)
+			return SYNC_SLOT;
+
 		//Transmit data (if any) in the assigned slot
 		return assignedSlot;
 	}
 
 	event void AMControl.stopDone(error_t err) {
-		printf("Radio OFF\n");
+		printf("DEBUG: Radio OFF\n");
 	}
 
 	void sendSyncBeacon() {
 		error_t status;
 		if (!syncSending) {
 			uint32_t epoch_time = call SlotScheduler.getEpochTime();
-			printf("Sending sync beacon with reference time %lu\n", epoch_time);
+			printf("DEBUG: Sending sync beacon with reference time %lu\n", epoch_time);
 			call PacketLink.setRetries(&syncBuf, 0);
 			status = call SyncSnd.send(AM_BROADCAST_ADDR, &syncBuf, sizeof(SyncMsg), epoch_time);
 			if (status == SUCCESS) {
 				syncSending = TRUE;
 			} else {
-				printf("Sync beacon sending failed\n");
+				printf("DEBUG: Sync beacon sending failed\n");
 			}
 		}
 	}
@@ -207,7 +217,7 @@ implementation {
 	event void SyncSnd.sendDone(message_t* msg, error_t error) {
 		syncSending = FALSE;
 		if (error != SUCCESS) {
-			printf("Sync beacon transmission failed\n");
+			printf("DEBUG: Sync beacon transmission failed\n");
 		}
 	}
 
@@ -222,7 +232,7 @@ implementation {
 			uint32_t ref_time = call TSPacket.eventTime(msg);
 			// synchronize the epoch start time (converted to our local time reference frame)
 			call SlotScheduler.syncEpochTime(ref_time);
-			printf("Local scheduler synchronized with master scheduler\n");
+			printf("DEBUG: Local scheduler synchronized with master scheduler (slot %d)\n", call SlotScheduler.getScheduledSlot());
 			syncReceived = TRUE;
 		}
 
@@ -232,12 +242,12 @@ implementation {
 	void sendJoinRequest() {
 		error_t status;
 		if (!joinReqSending) {
-			printf("Sending join request to master %d\n", masterAddr);
+			printf("DEBUG: Sending join request to master %d\n", masterAddr);
 			status = call JoinReqSnd.send(masterAddr, &joinReqBuf, sizeof(JoinReqMsg));
 			if (status == SUCCESS) {
 				joinReqSending = TRUE;
 			} else {
-				printf("Join request sending failed\n");
+				printf("DEBUG: Join request sending failed\n");
 			}
 		}
 	}
@@ -245,7 +255,7 @@ implementation {
 	event void JoinReqSnd.sendDone(message_t* msg, error_t error) {
 		joinReqSending = FALSE;
 		if (error != SUCCESS) {
-			printf("Join request transmission failed\n");
+			printf("DEBUG: Join request transmission failed\n");
 		}
 	}
 
@@ -259,7 +269,7 @@ implementation {
 
 		from = call AMPacket.source(msg);
 
-		printf("Join request received from %d\n", from);
+		printf("DEBUG: Join request received from %d\n", from);
 
 		//FIXME: Allocate slot only after receiving answer ACK
 		slot = allocateSlot(from);
@@ -268,7 +278,7 @@ implementation {
 		if(slot > 1)
 			sendJoinAnswer(from, slot);
 		else
-			printf("No slots available");
+			printf("DEBUG: No slots available");
 
 		return msg;
 	}
@@ -287,12 +297,12 @@ implementation {
 		error_t status;
 		if (!joinReqSending) {
 			joinAnsMsg->slot = slot;
-			printf("Sending join answer to %d\n", slave);
+			printf("DEBUG: Sending join answer to %d\n", slave);
 			status = call JoinAnsSnd.send(slave, &joinAnsBuf, sizeof(JoinAnsMsg));
 			if (status == SUCCESS) {
 				joinAnsSending = TRUE;
 			} else {
-				printf("Join answer sending failed\n");
+				printf("DEBUG: Join answer sending failed\n");
 			}
 		}
 	}
@@ -300,7 +310,7 @@ implementation {
 	event void JoinAnsSnd.sendDone(message_t* msg, error_t error) {
 		joinAnsSending = FALSE;
 		if (error != SUCCESS) {
-			printf("Join answer transmission failed\n");
+			printf("DEBUG: Join answer transmission failed\n");
 		}
 	}
 
@@ -312,9 +322,13 @@ implementation {
 
 		assignedSlot = joinAnsMsg->slot;
 
-		printf("Join completed to slot %d\n", assignedSlot);
+		printf("DEBUG: Join completed to slot %d\n", assignedSlot);
 		
 		hasJoined = TRUE;
+
+		//Signal slave is ready when it has joined
+		isStarted = TRUE;
+		signal Control.startDone(SUCCESS);
 
 		return msg;
 	}
@@ -323,33 +337,33 @@ implementation {
 
 	void sendData() {
 		if(dataReady) {
-			printf("Sending data\n");
+			printf("DEBUG: Sending data\n");
 			call DataSnd.send(masterAddr, dataMsg, dataLen);
 		} else {
-			printf("No data to transmit\n");
+			printf("DEBUG: No data to transmit\n");
 		}
 	}
 
 	command error_t AMSend.cancel(message_t *msg) {
-		return call AMSend.cancel(msg);
+		return call DataSnd.cancel(msg);
 	}
 
 	command void* AMSend.getPayload(message_t *msg, uint8_t len) {
-		return call AMSend.getPayload(msg, len);
+		return call DataSnd.getPayload(msg, len);
 	}
 
 	command uint8_t AMSend.maxPayloadLength() {
-		return call AMSend.maxPayloadLength();
+		return call DataSnd.maxPayloadLength();
 	}
 
 	command error_t AMSend.send(am_addr_t addr, message_t *msg, uint8_t len) {
 		if(dataReady)
 			return BUSY;
 
+		dataReady = TRUE;
+
 		dataMsg = msg;
 		dataLen = len;
-
-		dataReady = TRUE;
 
 		return SUCCESS;
 	}

@@ -1,4 +1,5 @@
 #include <Timer.h>
+#include <printf.h>
 
 ////// TDMA time params ///////
 #ifndef SLOT_DURATION
@@ -30,19 +31,24 @@ implementation {
 	uint8_t schedSlot;
 
 	command error_t SlotScheduler.start(uint32_t epoch_time, uint8_t firstSlot) {
-		if(isStarted == TRUE)
+		if(isStarted == TRUE) {
 			return EALREADY;
-		if(firstSlot >= N_SLOTS)
+		} if(firstSlot >= N_SLOTS)
 			return FAIL;
 
-		schedSlot = firstSlot;
-		call StartSlotTimer.startOneShotAt(epoch_time, SLOT_DURATION * firstSlot);
+		isStarted = TRUE;
 
+		schedSlot = firstSlot;
 		epoch_reference_time = epoch_time;
+
+		call StartSlotTimer.startOneShotAt(epoch_time, SLOT_DURATION * firstSlot);
 		call EpochTimer.startPeriodicAt(epoch_time, EPOCH_DURATION);
 
-		isStarted = TRUE;
 		return SUCCESS;
+	}
+
+	command bool SlotScheduler.isRunning() {
+		return isStarted;
 	}
 
 	command error_t SlotScheduler.stop() {
@@ -54,8 +60,8 @@ implementation {
 	}
 
 	command void SlotScheduler.syncEpochTime(uint32_t reference_time) {
-		call EpochTimer.startPeriodicAt(reference_time, EPOCH_DURATION);
 		epoch_reference_time = reference_time;
+		call EpochTimer.startPeriodicAt(reference_time, EPOCH_DURATION);
 	}
 
 	command uint32_t SlotScheduler.getEpochTime() {

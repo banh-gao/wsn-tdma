@@ -18,8 +18,4 @@ typedef nx_struct {
 	nx_uint8_t slot;
 } JoinAnsMsg;
 
-typedef nx_struct {
-	nx_uint16_t seqn;
-} DataMsg;
-
 #endif
