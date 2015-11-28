@@ -5,6 +5,7 @@
 
 #define SYNC_SLOT 0
 #define JOIN_SLOT 1
+#define LAST_DATA_SLOT (DATA_SLOTS+2-1)
 
 #define SLOTS_UNAVAILABLE 0
 
@@ -102,7 +103,7 @@ module TDMALinkP {
 		//Start master in SLOTTED MODE (radio managed by scheduler)
 		call SlotScheduler.start(0, SYNC_SLOT);
 
-		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", DATA_SLOTS, DATA_SLOTS+1);
+		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", DATA_SLOTS, LAST_DATA_SLOT);
 
 		return SUCCESS;
 	}
@@ -186,6 +187,10 @@ module TDMALinkP {
 		//Count inactive slots (if reschedule the same slot, the inactive interval is DATA_SLOTS + SYNC_SLOT + JOIN_SLOT - 1)
 		inactivePeriod = (slot == nextSlot) ? (DATA_SLOTS + 1) : udiff(slot, nextSlot) - 1;
 
+		//Special case with last slot immediately followed by first slot of next epoch
+		if(slot == LAST_DATA_SLOT && nextSlot == SYNC_SLOT)
+			inactivePeriod = 0;
+
 		//Radio is turned off only if there is at least SLEEP_INACTIVE_SLOTS inactive slots between this and the next slot
 		if(inactivePeriod >= SLEEP_SLOTS_THRESHOLD) {
 			printf("DEBUG: Keeping radio off for the next %d inactive slots\n", inactivePeriod);
@@ -210,7 +215,7 @@ module TDMALinkP {
 			return JOIN_SLOT;
 
 		//Schedule for next allocated data slot
-		if(slot < nextFreeSlotPos+2)
+		if(slot < nextFreeSlotPos + 1)
 			return slot+1;
 
 		//No more allocated data slots to listen to, schedule for next epoch sync beaconing
@@ -230,12 +235,12 @@ module TDMALinkP {
 		}
 
 		//If node needs to join try to join in next slot (only if synchronization has succeeded)
-		if(slot == SYNC_SLOT && syncReceived == TRUE && hasJoined == FALSE)
+		if(slot == SYNC_SLOT && hasJoined == FALSE)
 			return JOIN_SLOT;
 
 		//If join failed, retry in the next epoch
 		if(slot == JOIN_SLOT && hasJoined == FALSE) {
-			printf("DEBUG: Join failed\n");
+			printf("DEBUG: Missing join answer\n");
 			return SYNC_SLOT;
 		}
 
@@ -315,8 +320,8 @@ module TDMALinkP {
 	}
 
 	void sendJoinRequest() {
+		//Introduce a delay for sending request to reduce collisions, upper bounded in the first half of the join slot
 		uint32_t delay = call JoinReqRandom.rand16() % (SLOT_DURATION / 2);
-		printf("DELAY: %lu\n", delay);
 		call JoinReqDelayTimer.startOneShot(delay);
 	}
 
@@ -349,9 +354,7 @@ module TDMALinkP {
 
 		slave = call AMPacket.source(msg);
 
-		printf("DEBUG: Join request received from %d\n", slave);
-		
-		printf("NEXT FREE: %u\n", nextFreeSlotPos);
+		printf("DEBUG: Received join request from %d\n", slave);
 
 		allocSlot = allocateSlot(slave);
 
@@ -381,6 +384,11 @@ module TDMALinkP {
 
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot) {
 		error_t status;
+
+		//Send answer only if still inside join slot
+		if(call SlotScheduler.getScheduledSlot() != JOIN_SLOT)
+			return;
+
 		if (!joinReqSending) {
 			joinAnsMsg->slot = slot;
 			printf("DEBUG: Sending join answer to %d\n", slave);
@@ -425,7 +433,7 @@ module TDMALinkP {
 
 	void sendData() {
 		if(dataReady) {
-			printf("DEBUG: Sending data\n");
+			printf("DEBUG: Transmitting data\n");
 			call PacketLink.setRetries(dataMsg, DATA_RETRY);
 			call PacketLink.setRetryDelay(dataMsg, DATA_RETRY_DELAY);
 			call DataSnd.send(masterAddr, dataMsg, dataLen);

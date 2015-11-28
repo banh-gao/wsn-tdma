@@ -33,7 +33,7 @@ implementation {
 	event void DataTimer.fired() {
 		dataMsg = call TDMALinkSnd.getPayload(&dataBuf, sizeof(DataMsg));
 		dataMsg->seqn = seqn++;
-		printf("APP: Sending data %u\n", dataMsg->seqn);
+		printf("APP: Preparing data %u from node %d\n", dataMsg->seqn, TOS_NODE_ID);
 		call TDMALinkSnd.send(0, &dataBuf, sizeof(DataMsg));
 	}
 

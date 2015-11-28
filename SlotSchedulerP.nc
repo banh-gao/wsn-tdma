@@ -76,7 +76,7 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlots) {
 		if(!isStarted)
 			return;
 
-		if (nextSlot > schedSlot) {
+		if (nextSlot > schedSlot || (schedSlot == maxSlots-1 && nextSlot == 0)) {
 			schedSlot = nextSlot;
 			call StartSlotTimer.startOneShotAt(epoch_reference_time, slotDuration * schedSlot);
 		} else {

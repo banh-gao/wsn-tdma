@@ -243,7 +243,7 @@
   <plugin>
     org.contikios.cooja.plugins.SimControl
     <width>280</width>
-    <z>2</z>
+    <z>0</z>
     <height>151</height>
     <location_x>285</location_x>
     <location_y>581</location_y>
@@ -256,10 +256,10 @@
       <skin>org.contikios.cooja.plugins.skins.GridVisualizerSkin</skin>
       <skin>org.contikios.cooja.plugins.skins.TrafficVisualizerSkin</skin>
       <skin>org.contikios.cooja.plugins.skins.UDGMVisualizerSkin</skin>
-      <viewport>5.135117866298472 0.0 0.0 5.135117866298472 166.5100273714135 2.570249990877282</viewport>
+      <viewport>5.670072030587852 0.0 0.0 5.670072030587852 141.87353431238733 -48.1228191017648</viewport>
     </plugin_config>
     <width>819</width>
-    <z>0</z>
+    <z>2</z>
     <height>567</height>
     <location_x>1</location_x>
     <location_y>1</location_y>
