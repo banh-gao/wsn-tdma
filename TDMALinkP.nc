@@ -5,7 +5,9 @@
 
 #define SYNC_SLOT 0
 #define JOIN_SLOT 1
-#define LAST_DATA_SLOT (DATA_SLOTS+2-1)
+
+#define TOTAL_SLOTS (DATA_SLOTS+2)
+#define LAST_SLOT (TOTAL_SLOTS-1)
 
 #define SLOTS_UNAVAILABLE 0
 
@@ -103,7 +105,7 @@ module TDMALinkP {
 		//Start master in SLOTTED MODE (radio managed by scheduler)
 		call SlotScheduler.start(0, SYNC_SLOT);
 
-		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", DATA_SLOTS, LAST_DATA_SLOT);
+		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", DATA_SLOTS, LAST_SLOT);
 
 		return SUCCESS;
 	}
@@ -184,16 +186,19 @@ module TDMALinkP {
 			return SYNC_SLOT;
 		}
 
-		//Count inactive slots (if reschedule the same slot, the inactive interval is DATA_SLOTS + SYNC_SLOT + JOIN_SLOT - 1)
-		inactivePeriod = (slot == nextSlot) ? (DATA_SLOTS + 1) : udiff(slot, nextSlot) - 1;
+		//Count inactive slots
+		if(slot < nextSlot) //next slot in same epoch
+			inactivePeriod = nextSlot - slot - 1;
+		else //next slot in next epoch
+			inactivePeriod = TOTAL_SLOTS - (slot - nextSlot) - 1;
 
 		//Special case with last slot immediately followed by first slot of next epoch
-		if(slot == LAST_DATA_SLOT && nextSlot == SYNC_SLOT)
+		if(slot == LAST_SLOT && nextSlot == SYNC_SLOT)
 			inactivePeriod = 0;
 
 		//Radio is turned off only if there is at least SLEEP_INACTIVE_SLOTS inactive slots between this and the next slot
 		if(inactivePeriod >= SLEEP_SLOTS_THRESHOLD) {
-			printf("DEBUG: Keeping radio off for the next %d inactive slots\n", inactivePeriod);
+			printf("DEBUG: Keeping radio off for the next %u inactive slots\n", inactivePeriod);
 			call AMControl.stop();
 		}
 
