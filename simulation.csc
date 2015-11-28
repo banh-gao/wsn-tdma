@@ -9,7 +9,7 @@
   <simulation>
     <title>TDMA simulation</title>
     <randomseed>123456</randomseed>
-    <motedelay_us>1000000</motedelay_us>
+    <motedelay_us>100000</motedelay_us>
     <radiomedium>
       org.contikios.cooja.radiomediums.UDGM
       <transmitting_range>50.0</transmitting_range>
@@ -259,7 +259,7 @@
       <viewport>5.670072030587852 0.0 0.0 5.670072030587852 141.87353431238733 -48.1228191017648</viewport>
     </plugin_config>
     <width>819</width>
-    <z>3</z>
+    <z>1</z>
     <height>567</height>
     <location_x>1</location_x>
     <location_y>1</location_y>
@@ -272,7 +272,7 @@
       <coloring />
     </plugin_config>
     <width>712</width>
-    <z>1</z>
+    <z>2</z>
     <height>735</height>
     <location_x>819</location_x>
     <location_y>2</location_y>
@@ -297,7 +297,7 @@
       <zoomfactor>2000.0</zoomfactor>
     </plugin_config>
     <width>1920</width>
-    <z>2</z>
+    <z>3</z>
     <height>294</height>
     <location_x>0</location_x>
     <location_y>738</location_y>

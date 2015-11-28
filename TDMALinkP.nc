@@ -93,7 +93,6 @@ module TDMALinkP {
 	bool joinAnsSending = FALSE;
 
 	void startSlotTask();
-	uint8_t udiff(uint8_t n1, uint8_t n2);
 
 	command error_t Control.startMaster() {
 		isMaster = TRUE;
@@ -203,15 +202,6 @@ module TDMALinkP {
 		}
 
 		return nextSlot;
-	}
-
-	//Compute difference between unsigned 8 bytes integers
-	uint8_t udiff(uint8_t n1, uint8_t n2) {
-		uint8_t diff = n1 - n2;
-		if (diff & 0x80) {
-			diff = ~diff + 1;
-		}
-		return diff;
 	}
 
 	uint8_t getNextMasterSlot(uint8_t slot) {
@@ -328,8 +318,8 @@ module TDMALinkP {
 	}
 
 	void sendJoinRequest() {
-		//Introduce a delay for sending request to reduce collisions, upper bounded in the first half of the join slot
-		uint32_t delay = call JoinReqRandom.rand16() % (SLOT_DURATION / 2);
+		//Introduce a collision avoidance delay for join requests
+		uint32_t delay = call JoinReqRandom.rand16() % SLOT_DURATION;
 		call JoinReqDelayTimer.startOneShot(delay);
 	}
 

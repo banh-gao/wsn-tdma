@@ -26,7 +26,7 @@ implementation {
 
 	event void TDMALink.startDone(error_t error) {
 		if(!call TDMALink.isMaster()) {
-			call DataTimer.startOneShot(500);
+			call DataTimer.startOneShot(100);
 		}
 	}
 
@@ -37,7 +37,7 @@ implementation {
 		printf("APP: Preparing data %u from node %d\n", dataMsg->seqn, TOS_NODE_ID);
 		status = call TDMALinkSnd.send(0, &dataBuf, sizeof(DataMsg));
 		if (status != SUCCESS) {
-			printf("APP: Data sending failed\n");
+			printf("APP: Data preparing failed\n");
 		}
 	}
 
@@ -58,7 +58,7 @@ implementation {
 		if (error != SUCCESS) {
 			printf("APP: Data transmission failed\n");
 		}
-		//call DataTimer.startOneShot(500);
+		call DataTimer.startOneShot(100);
 	}
 
 	event void TDMALink.stopDone(error_t error) {
