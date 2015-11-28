@@ -6,6 +6,8 @@
 #define SYNC_SLOT 0
 #define JOIN_SLOT 1
 
+#define SLOTS_UNAVAILABLE 0
+
 #define RESYNC_THRESHOLD 5
 
 #define DATA_RETRY 1
@@ -99,6 +101,8 @@ module TDMALinkP {
 
 		//Start master in SLOTTED MODE (radio managed by scheduler)
 		call SlotScheduler.start(0, SYNC_SLOT);
+
+		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", DATA_SLOTS, DATA_SLOTS+1);
 
 		return SUCCESS;
 	}
@@ -339,6 +343,7 @@ module TDMALinkP {
 
 	event message_t* JoinReqRcv.receive(message_t* msg, void* payload, uint8_t length) {		
 		am_addr_t slave;
+		uint8_t allocSlot;
 		if (length != sizeof(JoinReqMsg))
 			return msg;
 
@@ -346,11 +351,15 @@ module TDMALinkP {
 
 		printf("DEBUG: Join request received from %d\n", slave);
 		
+		printf("NEXT FREE: %u\n", nextFreeSlotPos);
+
+		allocSlot = allocateSlot(slave);
+
 		//Send answer only if there are slots available
-		if(nextFreeSlotPos < DATA_SLOTS) {
-			sendJoinAnswer(slave, allocateSlot(slave));
-		} else
-			printf("WARNING: No slots available\n");
+		if(allocSlot != SLOTS_UNAVAILABLE)
+			sendJoinAnswer(slave, allocSlot);
+		else
+			printf("WARNING: No slots available for slave %u\n", slave);
 
 		return msg;
 	}
@@ -362,6 +371,9 @@ module TDMALinkP {
 			if(allocatedSlots[slot] == slave)
 				return slot+2;
 		}
+
+		if(nextFreeSlotPos >= DATA_SLOTS)
+			return SLOTS_UNAVAILABLE;
 
 		allocatedSlots[nextFreeSlotPos] = slave;
 		return (nextFreeSlotPos++)+2;
