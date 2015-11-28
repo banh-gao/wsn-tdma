@@ -12,7 +12,7 @@ CFLAGS += -DNEW_PRINTF_SEMANTICS
 
 #Define slotted transmission timing
 CFLAGS += -DSLOT_DURATION=32768L/10
-CFLAGS += -DN_SLOTS=10
+CFLAGS += -DDATA_SLOTS=10
 
 
 include $(TINYOS_ROOT_DIR)/Makefile.include

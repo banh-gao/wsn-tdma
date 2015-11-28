@@ -2,8 +2,8 @@
 #error SLOT_DURATION not set
 #endif
 
-#ifndef N_SLOTS
-#error N_SLOTS not set
+#ifndef DATA_SLOTS
+#error DATA_SLOTS not set
 #endif
 
 configuration TDMALinkC {
@@ -46,8 +46,8 @@ configuration TDMALinkC {
 	components new AMSenderC(AM_DATAMSG) as DataSndC;
 	Impl.DataSnd -> DataSndC;
 
-	//Slot scheduler
-	components new SlotSchedulerC(SLOT_DURATION, N_SLOTS);
+	//Slot scheduler (SYNC_SLOT + JOIN_SLOT + DATA_SLOTS)
+	components new SlotSchedulerC(SLOT_DURATION, 2 + DATA_SLOTS);
 	Impl.SlotScheduler -> SlotSchedulerC;
 
 	//Export interface for incoming data messages

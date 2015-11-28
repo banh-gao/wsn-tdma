@@ -11,6 +11,8 @@
 #define DATA_RETRY 1
 #define DATA_RETRY_DELAY SLOT_DURATION/2
 
+#define SLEEP_SLOTS_THRESHOLD 1
+
 module TDMALinkP {
 	provides interface SplitControl as Control;
 	provides interface AMSend;
@@ -46,7 +48,7 @@ module TDMALinkP {
 	bool isMaster;
 
 	//Master
-	am_addr_t allocatedSlots[N_SLOTS-2];
+	am_addr_t allocatedSlots[DATA_SLOTS];
 	uint8_t nextFreeSlotPos = 0;
 	uint8_t allocateSlot(am_addr_t slave);
 	void sendSyncBeacon();
@@ -85,6 +87,9 @@ module TDMALinkP {
 	JoinAnsMsg* joinAnsMsg;
 	bool joinAnsSending = FALSE;
 
+	void startSlotTask();
+	uint8_t udiff(uint8_t n1, uint8_t n2);
+
 	command error_t Control.start() {
 		isMaster = (TOS_NODE_ID == 1);
 
@@ -100,9 +105,8 @@ module TDMALinkP {
 			//Scheduler is activated only after successful synchronization
 			syncMode = TRUE;
 			printf("DEBUG: Entering SYNC MODE\n");
+			call AMControl.start();
 		}
-		
-		call AMControl.start();
 
 		return SUCCESS;
 	}
@@ -117,25 +121,17 @@ module TDMALinkP {
 	event void SlotScheduler.slotStarted(uint8_t slot) {
 		printf("DEBUG: Slot %d started\n", slot);
 
-		//TODO: move all to radio startDone
-		if(isMaster) {
-			if(slot == SYNC_SLOT)
-				sendSyncBeacon();
-			return;
-			//TODO: turn on radio for join listen and allocate slots (if slot is started radio has always to be turned on)
-		}
-
-		if(slot == SYNC_SLOT)
-			syncReceived = FALSE;
-			//TODO: turn on radio for sync listening
-		else if (slot == JOIN_SLOT)
-			sendJoinRequest();
-		else
-			sendData();
+		//Turn radio on, if it's already on execute slot task immediately
+		if(call AMControl.start() == EALREADY)
+			startSlotTask();
 	}
 
 	event void AMControl.startDone(error_t err) {
 		printf("DEBUG: Radio ON\n");
+
+		//Check if radio was turned on by slot scheduler
+		if(call SlotScheduler.isRunning())
+			startSlotTask();
 
 		//FOR CONTROL INTERFACE: Signal that master is ready only when radio is on for the first time
 		if(isMaster && isStarted == FALSE) {
@@ -144,9 +140,27 @@ module TDMALinkP {
 		}
 	}
 
+	void startSlotTask() {
+		//At this point it is guaranteed that the radio is already on
+
+		uint8_t slot = call SlotScheduler.getScheduledSlot();
+		if(isMaster) {
+			if(slot == SYNC_SLOT)
+				sendSyncBeacon();
+			return;
+		}
+
+		if(slot == SYNC_SLOT)
+			syncReceived = FALSE;
+		else if (slot == JOIN_SLOT)
+			sendJoinRequest();
+		else
+			sendData();
+	}
+
 	event uint8_t SlotScheduler.slotEnded(uint8_t slot) {
 		uint8_t nextSlot;
-		bool radioOff;
+		uint8_t inactivePeriod;
 		printf("DEBUG: Slot %d ended\n", slot);
 
 		nextSlot = (isMaster) ? getNextMasterSlot(slot) : getNextSlaveSlot(slot);
@@ -158,11 +172,25 @@ module TDMALinkP {
 			return SYNC_SLOT;
 		}
 
-		radioOff = (isMaster) ? getMasterRadioOff(slot, nextSlot) : getSlaveRadioOff(slot, nextSlot);
-		if(radioOff)
+		//Count inactive slots (if reschedule the same slot, the inactive interval is DATA_SLOTS + SYNC_SLOT + JOIN_SLOT - 1)
+		inactivePeriod = (slot == nextSlot) ? (DATA_SLOTS + 1) : udiff(slot, nextSlot) - 1;
+
+		//Radio is turned off only if there is at least SLEEP_INACTIVE_SLOTS inactive slots between this and the next slot
+		if(inactivePeriod >= SLEEP_SLOTS_THRESHOLD) {
+			printf("DEBUG: Keeping radio off for the next %d inactive slots\n", inactivePeriod);
 			call AMControl.stop();
+		}
 
 		return nextSlot;
+	}
+
+	//Compute difference between unsigned 8 bytes integers
+	uint8_t udiff(uint8_t n1, uint8_t n2) {
+		uint8_t diff = n1 - n2;
+		if (diff & 0x80) {
+			diff = ~diff + 1;
+		}
+		return diff;
 	}
 
 	uint8_t getNextMasterSlot(uint8_t slot) {
@@ -206,14 +234,6 @@ module TDMALinkP {
 
 		//Transmit data (if any) in the assigned slot
 		return assignedSlot;
-	}
-
-	bool getMasterRadioOff(uint8_t current, uint8_t next) {
-		return FALSE;
-	}
-
-	bool getSlaveRadioOff(uint8_t current, uint8_t next) {
-		return FALSE;
 	}
 
 	event void AMControl.stopDone(error_t err) {
@@ -320,7 +340,7 @@ module TDMALinkP {
 		printf("DEBUG: Join request received from %d\n", slave);
 		
 		//Send answer only if there are slots available
-		if(nextFreeSlotPos < N_SLOTS-2) {
+		if(nextFreeSlotPos < DATA_SLOTS) {
 			sendJoinAnswer(slave, allocateSlot(slave));
 		} else
 			printf("WARNING: No slots available\n");
@@ -331,13 +351,13 @@ module TDMALinkP {
 	uint8_t allocateSlot(am_addr_t slave) {
 		int slot;
 		//Check if slot was already allocated to the node
-		for(slot=0;slot<N_SLOTS-2;slot++) {
+		for(slot=0;slot<DATA_SLOTS;slot++) {
 			if(allocatedSlots[slot] == slave)
 				return slot+2;
 		}
 
 		allocatedSlots[nextFreeSlotPos] = slave;
-		return (nextFreeSlotPos++)-2;
+		return (nextFreeSlotPos++)+2;
 	}
 
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot) {
@@ -370,7 +390,7 @@ module TDMALinkP {
 
 		assignedSlot = joinAnsMsg->slot;
 
-		printf("DEBUG: Join completed to slot %d\n", assignedSlot);
+		printf("DEBUG: Join completed to slot %u\n", assignedSlot);
 		
 		hasJoined = TRUE;
 
