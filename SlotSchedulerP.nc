@@ -76,10 +76,12 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlots) {
 		if(!isStarted)
 			return;
 
+		//Next slot in the same epoch or current and next slot are one just after the other between current and next epoch
 		if (nextSlot > schedSlot || (schedSlot == maxSlots-1 && nextSlot == 0)) {
 			schedSlot = nextSlot;
 			call StartSlotTimer.startOneShotAt(epoch_reference_time, slotDuration * schedSlot);
 		} else {
+			//Next slot is in next epoch
 			schedSlot = nextSlot;
 			call StartSlotTimer.startOneShotAt(epoch_reference_time + epochDuration, slotDuration * schedSlot);
 		}

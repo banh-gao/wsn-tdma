@@ -31,10 +31,14 @@ implementation {
 	}
 
 	event void DataTimer.fired() {
+		error_t status;
 		dataMsg = call TDMALinkSnd.getPayload(&dataBuf, sizeof(DataMsg));
 		dataMsg->seqn = seqn++;
 		printf("APP: Preparing data %u from node %d\n", dataMsg->seqn, TOS_NODE_ID);
-		call TDMALinkSnd.send(0, &dataBuf, sizeof(DataMsg));
+		status = call TDMALinkSnd.send(0, &dataBuf, sizeof(DataMsg));
+		if (status != SUCCESS) {
+			printf("APP: Data sending failed\n");
+		}
 	}
 
 	event message_t* TDMALinkRcv.receive(message_t *msg, void *payload, uint8_t len) {
@@ -51,7 +55,10 @@ implementation {
 	}
 
 	event void TDMALinkSnd.sendDone(message_t* msg, error_t error) {
-		call DataTimer.startOneShot(500);
+		if (error != SUCCESS) {
+			printf("APP: Data transmission failed\n");
+		}
+		//call DataTimer.startOneShot(500);
 	}
 
 	event void TDMALink.stopDone(error_t error) {

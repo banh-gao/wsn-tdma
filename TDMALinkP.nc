@@ -6,7 +6,7 @@
 #define SYNC_SLOT 0
 #define JOIN_SLOT 1
 
-#define TOTAL_SLOTS (DATA_SLOTS+2)
+#define TOTAL_SLOTS (MAX_SLAVES+2)
 #define LAST_SLOT (TOTAL_SLOTS-1)
 
 #define SLOTS_UNAVAILABLE 0
@@ -53,7 +53,7 @@ module TDMALinkP {
 	bool isMaster;
 
 	//Master
-	am_addr_t allocatedSlots[DATA_SLOTS];
+	am_addr_t allocatedSlots[MAX_SLAVES];
 	uint8_t nextFreeSlotPos = 0;
 	uint8_t allocateSlot(am_addr_t slave);
 	void sendSyncBeacon();
@@ -105,7 +105,7 @@ module TDMALinkP {
 		//Start master in SLOTTED MODE (radio managed by scheduler)
 		call SlotScheduler.start(0, SYNC_SLOT);
 
-		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", DATA_SLOTS, LAST_SLOT);
+		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", MAX_SLAVES, LAST_SLOT);
 
 		return SUCCESS;
 	}
@@ -254,7 +254,10 @@ module TDMALinkP {
 			return SYNC_SLOT;
 
 		//Transmit data (if any) in the assigned slot
-		return assignedSlot;
+		if(dataReady == TRUE)
+			return assignedSlot;
+		else
+			return SYNC_SLOT;
 	}
 
 	event void AMControl.stopDone(error_t err) {
@@ -375,12 +378,12 @@ module TDMALinkP {
 	uint8_t allocateSlot(am_addr_t slave) {
 		int slot;
 		//Check if slot was already allocated to the node
-		for(slot=0;slot<DATA_SLOTS;slot++) {
+		for(slot=0;slot<MAX_SLAVES;slot++) {
 			if(allocatedSlots[slot] == slave)
 				return slot+2;
 		}
 
-		if(nextFreeSlotPos >= DATA_SLOTS)
+		if(nextFreeSlotPos >= MAX_SLAVES)
 			return SLOTS_UNAVAILABLE;
 
 		allocatedSlots[nextFreeSlotPos] = slave;

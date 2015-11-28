@@ -259,7 +259,7 @@
       <viewport>5.670072030587852 0.0 0.0 5.670072030587852 141.87353431238733 -48.1228191017648</viewport>
     </plugin_config>
     <width>819</width>
-    <z>2</z>
+    <z>3</z>
     <height>567</height>
     <location_x>1</location_x>
     <location_y>1</location_y>
@@ -293,11 +293,11 @@
       <mote>10</mote>
       <showRadioRXTX />
       <showRadioHW />
-      <showLEDs />
-      <zoomfactor>500.0</zoomfactor>
+      <showLogOutput />
+      <zoomfactor>2000.0</zoomfactor>
     </plugin_config>
     <width>1920</width>
-    <z>3</z>
+    <z>2</z>
     <height>294</height>
     <location_x>0</location_x>
     <location_y>738</location_y>
