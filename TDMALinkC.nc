@@ -7,7 +7,7 @@
 #endif
 
 configuration TDMALinkC {
-	provides interface SplitControl as Control;
+	provides interface TDMALink as Control;
 	provides interface Receive;
 	provides interface AMSend;
 } implementation {
@@ -58,5 +58,5 @@ configuration TDMALinkC {
 	AMSend = Impl;
 
 	//Export control interface
-	Control = Impl;
+	Control = Impl.Control;
 }

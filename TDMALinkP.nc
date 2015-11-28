@@ -14,7 +14,7 @@
 #define SLEEP_SLOTS_THRESHOLD 1
 
 module TDMALinkP {
-	provides interface SplitControl as Control;
+	provides interface TDMALink as Control;
 	provides interface AMSend;
 	provides interface Receive;
 
@@ -58,7 +58,7 @@ module TDMALinkP {
 
 	//Slave
 	am_addr_t masterAddr;
-	bool syncMode;
+	bool syncMode = FALSE;
 	bool syncReceived = FALSE;
 	uint8_t missedSyncCount = 0;
 	bool hasJoined = FALSE;
@@ -90,25 +90,32 @@ module TDMALinkP {
 	void startSlotTask();
 	uint8_t udiff(uint8_t n1, uint8_t n2);
 
-	command error_t Control.start() {
-		isMaster = (TOS_NODE_ID == 1);
+	command error_t Control.startMaster() {
+		isMaster = TRUE;
 
 		syncMsg = call SyncSnd.getPayload(&joinAnsBuf, sizeof(SyncMsg));
 		joinReqMsg = call JoinReqSnd.getPayload(&joinAnsBuf, sizeof(JoinReqMsg));
 		joinAnsMsg = call JoinAnsSnd.getPayload(&joinAnsBuf, sizeof(JoinAnsMsg));
 
-		if(isMaster) {
-			syncMode = FALSE;
-			//Start slot scheduler now
-			call SlotScheduler.start(0, SYNC_SLOT);
-		} else {
-			//Scheduler is activated only after successful synchronization
-			syncMode = TRUE;
-			printf("DEBUG: Entering SYNC MODE\n");
-			call AMControl.start();
-		}
+		//Start master in SLOTTED MODE (radio managed by scheduler)
+		call SlotScheduler.start(0, SYNC_SLOT);
 
 		return SUCCESS;
+	}
+
+	command error_t Control.startSlave() {
+		isMaster = FALSE;
+
+		//Start slave in SYNC MODE (radio always on)
+		syncMode = TRUE;
+		printf("DEBUG: Entering SYNC MODE\n");
+		call AMControl.start();
+
+		return SUCCESS;
+	}
+
+	command bool Control.isMaster() {
+		return isMaster;
 	}
 
 	command error_t Control.stop() {
