@@ -104,13 +104,15 @@ module TDMALinkP {
 		//Start master in SLOTTED MODE (radio managed by scheduler)
 		call SlotScheduler.start(0, SYNC_SLOT);
 
-		printf("DEBUG: Master node started with %u slave slots (from 2 to %u)\n", MAX_SLAVES, LAST_SLOT);
+		printf("DEBUG: Master node %u started [SLAVE SLOTS:%u | SLOT DURATION:%ums | EPOCH DURATION:%ums]\n", TOS_NODE_ID, MAX_SLAVES, SLOT_DURATION, (MAX_SLAVES + 2) * SLOT_DURATION);
 
 		return SUCCESS;
 	}
 
 	command error_t Control.startSlave() {
 		isMaster = FALSE;
+
+		printf("DEBUG: Slave node %u started\n", TOS_NODE_ID);
 
 		//Start slave in SYNC MODE (radio always on)
 		syncMode = TRUE;

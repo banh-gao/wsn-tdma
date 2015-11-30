@@ -46,7 +46,7 @@ configuration TDMALinkC {
 	components new AMSenderC(AM_DATAMSG) as DataSndC;
 	Impl.DataSnd -> DataSndC;
 
-	//Slot scheduler (SYNC_SLOT + JOIN_SLOT + MAX_SLAVES)
+	//Slot scheduler
 	components new SlotSchedulerC(SLOT_DURATION, 1 + MAX_SLAVES);
 	Impl.SlotScheduler -> SlotSchedulerC;
 

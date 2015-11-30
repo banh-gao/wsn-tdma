@@ -10,9 +10,10 @@ CFLAGS += -DTOSH_DATA_LENGTH=30
 CFLAGS += -I$(TINYOS_ROOT_DIR)/tos/lib/printf
 CFLAGS += -DNEW_PRINTF_SEMANTICS
 
-#Define slotted transmission timing
-CFLAGS += -DSLOT_DURATION=32768L/10
-CFLAGS += -DMAX_SLAVES=254
+#Define the duration of a single time slot (in milliseconds)
+CFLAGS += -DSLOT_DURATION=100
+#Define the amount of available data slots (up to 254)
+CFLAGS += -DMAX_SLAVES=15
 
 
 include $(TINYOS_ROOT_DIR)/Makefile.include

@@ -267,12 +267,12 @@
   <plugin>
     org.contikios.cooja.plugins.LogListener
     <plugin_config>
-      <filter>ID:8</filter>
+      <filter>ID:1</filter>
       <formatted_time />
       <coloring />
     </plugin_config>
     <width>730</width>
-    <z>1</z>
+    <z>2</z>
     <height>258</height>
     <location_x>635</location_x>
     <location_y>165</location_y>
@@ -294,10 +294,10 @@
       <showRadioRXTX />
       <showRadioHW />
       <showLogOutput />
-      <zoomfactor>20000.0</zoomfactor>
+      <zoomfactor>5000.0</zoomfactor>
     </plugin_config>
     <width>1366</width>
-    <z>2</z>
+    <z>3</z>
     <height>271</height>
     <location_x>-1</location_x>
     <location_y>424</location_y>
@@ -305,7 +305,7 @@
   <plugin>
     PowerTracker
     <width>336</width>
-    <z>3</z>
+    <z>1</z>
     <height>167</height>
     <location_x>981</location_x>
     <location_y>-1</location_y>
