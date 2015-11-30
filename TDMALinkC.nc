@@ -47,7 +47,7 @@ configuration TDMALinkC {
 	Impl.DataSnd -> DataSndC;
 
 	//Slot scheduler (SYNC_SLOT + JOIN_SLOT + MAX_SLAVES)
-	components new SlotSchedulerC(SLOT_DURATION, 2 + MAX_SLAVES);
+	components new SlotSchedulerC(SLOT_DURATION, 1 + MAX_SLAVES);
 	Impl.SlotScheduler -> SlotSchedulerC;
 
 	//Export interface for incoming data messages

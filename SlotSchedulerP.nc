@@ -1,6 +1,6 @@
 #include <Timer.h>
 
-generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlots) {
+generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlotId) {
 	provides interface SlotScheduler;
 
 	uses {
@@ -11,7 +11,7 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlots) {
 } implementation {
 
 	//Defined at compile time
-	uint32_t epochDuration = slotDuration * maxSlots;
+	uint32_t epochDuration = slotDuration * ((uint16_t) maxSlotId + 1);
 
 	bool isStarted = FALSE;
 	uint32_t epoch_reference_time;
@@ -20,10 +20,8 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlots) {
 	command error_t SlotScheduler.start(uint32_t epoch_time, uint8_t firstSlot) {
 		if(isStarted == TRUE) {
 			return EALREADY;
-		} if(firstSlot >= maxSlots)
+		} if(firstSlot > maxSlotId)
 			return FAIL;
-
-		epochDuration = slotDuration * maxSlots;
 
 		isStarted = TRUE;
 		schedSlot = firstSlot;
@@ -77,7 +75,7 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlots) {
 			return;
 
 		//Next slot in the same epoch or current and next slot are one just after the other between current and next epoch
-		if (nextSlot > schedSlot || (schedSlot == maxSlots-1 && nextSlot == 0)) {
+		if (nextSlot > schedSlot || (schedSlot == maxSlotId && nextSlot == 0)) {
 			schedSlot = nextSlot;
 			call StartSlotTimer.startOneShotAt(epoch_reference_time, slotDuration * schedSlot);
 		} else {

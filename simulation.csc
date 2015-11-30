@@ -242,11 +242,11 @@
   </simulation>
   <plugin>
     org.contikios.cooja.plugins.SimControl
-    <width>280</width>
+    <width>282</width>
     <z>0</z>
-    <height>151</height>
-    <location_x>285</location_x>
-    <location_y>581</location_y>
+    <height>161</height>
+    <location_x>633</location_x>
+    <location_y>3</location_y>
   </plugin>
   <plugin>
     org.contikios.cooja.plugins.Visualizer
@@ -256,26 +256,26 @@
       <skin>org.contikios.cooja.plugins.skins.GridVisualizerSkin</skin>
       <skin>org.contikios.cooja.plugins.skins.TrafficVisualizerSkin</skin>
       <skin>org.contikios.cooja.plugins.skins.UDGMVisualizerSkin</skin>
-      <viewport>5.670072030587852 0.0 0.0 5.670072030587852 141.87353431238733 -48.1228191017648</viewport>
+      <viewport>3.8795229682969516 0.0 0.0 3.8795229682969516 129.33452347689658 -33.08403412226016</viewport>
     </plugin_config>
-    <width>819</width>
-    <z>1</z>
-    <height>567</height>
+    <width>629</width>
+    <z>4</z>
+    <height>405</height>
     <location_x>1</location_x>
-    <location_y>1</location_y>
+    <location_y>3</location_y>
   </plugin>
   <plugin>
     org.contikios.cooja.plugins.LogListener
     <plugin_config>
-      <filter />
+      <filter>ID:8</filter>
       <formatted_time />
       <coloring />
     </plugin_config>
-    <width>712</width>
-    <z>2</z>
-    <height>735</height>
-    <location_x>819</location_x>
-    <location_y>2</location_y>
+    <width>730</width>
+    <z>1</z>
+    <height>258</height>
+    <location_x>635</location_x>
+    <location_y>165</location_y>
   </plugin>
   <plugin>
     org.contikios.cooja.plugins.TimeLine
@@ -294,35 +294,21 @@
       <showRadioRXTX />
       <showRadioHW />
       <showLogOutput />
-      <zoomfactor>2000.0</zoomfactor>
+      <zoomfactor>20000.0</zoomfactor>
     </plugin_config>
-    <width>1920</width>
-    <z>3</z>
-    <height>294</height>
-    <location_x>0</location_x>
-    <location_y>738</location_y>
+    <width>1366</width>
+    <z>2</z>
+    <height>271</height>
+    <location_x>-1</location_x>
+    <location_y>424</location_y>
   </plugin>
   <plugin>
     PowerTracker
-    <width>390</width>
-    <z>5</z>
-    <height>406</height>
-    <location_x>1530</location_x>
-    <location_y>2</location_y>
-  </plugin>
-  <plugin>
-    org.contikios.cooja.plugins.RadioLogger
-    <plugin_config>
-      <split>111</split>
-      <formatted_time />
-      <showdups>false</showdups>
-      <hidenodests>false</hidenodests>
-    </plugin_config>
-    <width>388</width>
-    <z>4</z>
-    <height>329</height>
-    <location_x>1532</location_x>
-    <location_y>410</location_y>
+    <width>336</width>
+    <z>3</z>
+    <height>167</height>
+    <location_x>981</location_x>
+    <location_y>-1</location_y>
   </plugin>
 </simconf>
 
