@@ -1,4 +1,4 @@
-interface TDMALink {
+interface TDMALinkControl {
 	command error_t startMaster();
 	command error_t startSlave();
 	command error_t stop();

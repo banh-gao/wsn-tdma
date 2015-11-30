@@ -6,7 +6,7 @@ typedef nx_struct {
 
 module TestP {
 	uses interface Boot;
-	uses interface TDMALink;
+	uses interface TDMALinkControl;
 	uses interface AMSend as TDMALinkSnd;
 	uses interface Receive as TDMALinkRcv;
 	uses interface AMPacket;
@@ -19,13 +19,13 @@ implementation {
 
 	event void Boot.booted() {
 		if(TOS_NODE_ID == 1)
-			call TDMALink.startMaster();
+			call TDMALinkControl.startMaster();
 		else
-			call TDMALink.startSlave();
+			call TDMALinkControl.startSlave();
 	}
 
-	event void TDMALink.startDone(error_t error) {
-		if(!call TDMALink.isMaster()) {
+	event void TDMALinkControl.startDone(error_t error) {
+		if(!call TDMALinkControl.isMaster()) {
 			call DataTimer.startOneShot(100);
 		}
 	}
@@ -61,6 +61,6 @@ implementation {
 		call DataTimer.startOneShot(100);
 	}
 
-	event void TDMALink.stopDone(error_t error) {
+	event void TDMALinkControl.stopDone(error_t error) {
 	}
 }

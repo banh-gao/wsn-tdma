@@ -1,13 +1,13 @@
 <tos_image>
   <ident>
+    <appname>TestC</appname>
+    <uidhash>D7A1B3FBL</uidhash>
+    <deluge_support>no</deluge_support>
+    <username>zdenial</username>
+    <userhash>2FADEAA1L</userhash>
+    <timestamp>565C38FEL</timestamp>
     <platform>telosb</platform>
     <hostname>roadRunner</hostname>
-    <appname>TestC</appname>
-    <timestamp>565C3409L</timestamp>
-    <userhash>2FADEAA1L</userhash>
-    <username>zdenial</username>
-    <uidhash>421415C7L</uidhash>
-    <deluge_support>no</deluge_support>
   </ident>
   <image format="ihex">
 :104000005542200135D0085A8245AC143140003960

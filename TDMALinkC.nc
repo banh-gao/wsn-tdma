@@ -7,7 +7,7 @@
 #endif
 
 configuration TDMALinkC {
-	provides interface TDMALink as Control;
+	provides interface TDMALinkControl as Control;
 	provides interface Receive;
 	provides interface AMSend;
 } implementation {

@@ -7,7 +7,7 @@ implementation {
 	components SerialPrintfC, SerialStartC;
 
 	TestP.Boot -> MainC;
-	TestP.TDMALink -> TDMALinkC;
+	TestP.TDMALinkControl -> TDMALinkC;
 	TestP.TDMALinkSnd -> TDMALinkC.AMSend;
 	TestP.TDMALinkRcv -> TDMALinkC.Receive;
 

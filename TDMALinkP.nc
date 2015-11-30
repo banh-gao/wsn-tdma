@@ -19,7 +19,7 @@
 #define SLEEP_SLOTS_THRESHOLD 1
 
 module TDMALinkP {
-	provides interface TDMALink as Control;
+	provides interface TDMALinkControl as Control;
 	provides interface AMSend;
 	provides interface Receive;
 

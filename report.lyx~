@@ -115,16 +115,28 @@ Daniel Zozin (M.
  171523)
 \end_layout
 
-\begin_layout Abstract
-The abstract
-\end_layout
-
 \begin_layout Section
-Introduction
+Component usage
 \end_layout
 
 \begin_layout Standard
-The introduction
+The implemented TDMA layer can support up to 254 slave nodes that negotiate
+ needs to be assigned a data slot from the master node.
+ To tune the layer to application needs, the number of available data slots
+ (MAX_SLOTS) and the single slot duration (SLOT_DURATION) can be changed
+ in the Makefile.
+\end_layout
+
+\begin_layout Standard
+The custom TDMALinkControl interface is similar to the SplitControl interface.
+ It has a startMaster and startSlave commands as well as startDone event
+ that will be signaled when the layer is ready to receive or transmit data
+ (after slave has joined).
+\end_layout
+
+\begin_layout Standard
+To send and receive data packets the layer exposes the standard AMSend and
+ Receive interfaces.
 \end_layout
 
 \begin_layout Section
