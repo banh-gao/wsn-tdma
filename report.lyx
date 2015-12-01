@@ -144,30 +144,77 @@ Implementation Considerations
 \end_layout
 
 \begin_layout Standard
-SlotScheduler
+The SlotScheduler is a support component that simplify the slot management
+ and timing.
+ It has a timer for epochs counting, one for slot scheduling and one to
+ control a active slot duration.
+ The idea is that a node life cycle starts in one slot and the next active
+ scheduled slot is determined at the end of the currently active slot.
 \end_layout
 
 \begin_layout Standard
-Join delay timer
+The epoch timer of the SlotScheduler in the slaves is restarted with the
+ reference time contained in synchronization beacons.
+ Also the slot scheduler timer uses the reference time contained in the
+ synchronization messages to schedule the next slot to execute, however,
+ if there is already one scheduled slot it will be executed using the reference
+ time of when it was started (although this is commonly not the case since
+ beacons should arrive only during the synchronization slot).
+ It is stopped when a slave enters in synchronization mode and restarted
+ when the synchronization beacon arrives.
 \end_layout
 
 \begin_layout Standard
-Radio duty cycle
+Join requests from slaves are sent with a random delay to avoid collisions
+ in slot one.
+ Collisions are very likely in this slot since all the slave schedulers
+ are synchronized due to the synchronization beacon of the previous slot.
 \end_layout
 
 \begin_layout Standard
-Data transmission interface (ignore destination address, 1-size queue)
+Radio in the slaves nodes can be turned off during all inactive slot periods.
+ The number of next inactive slots can be determined at the end of an active
+ slot, if it more than a given threshold (set to 1 inactive slot) the radio
+ is turned off.
+ It is turned back on only before executing an active task or when a node
+ enters in synchronization mode.
 \end_layout
 
 \begin_layout Standard
-The conclusions
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\noindent
+\align center
+\begin_inset Graphics
+	filename flow.svg
+	scale 70
+	scaleBeforeRotation
+	rotateAngle 90
+
+\end_inset
+
+
 \end_layout
 
-\begin_layout Standard
-\begin_inset CommandInset bibtex
-LatexCommand bibtex
-bibfiles "bibliography"
-options "plainnat"
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Nodes FSA
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
 
 \end_inset
 

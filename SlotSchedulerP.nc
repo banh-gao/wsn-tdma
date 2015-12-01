@@ -5,8 +5,7 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlotId) {
 
 	uses {
 		interface Timer<T32khz> as EpochTimer;
-		interface Timer<T32khz> as StartSlotTimer;
-		interface Timer<T32khz> as EndSlotTimer;
+		interface Timer<T32khz> as SlotTimer;
 	}
 } implementation {
 
@@ -14,6 +13,7 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlotId) {
 	uint32_t epochDuration = slotDuration * ((uint16_t) maxSlotId + 1);
 
 	bool isStarted = FALSE;
+	bool isSlotActive = FALSE;
 	uint32_t epoch_reference_time;
 	uint8_t schedSlot;
 
@@ -27,7 +27,7 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlotId) {
 		schedSlot = firstSlot;
 		epoch_reference_time = epoch_time;
 
-		call StartSlotTimer.startOneShotAt(epoch_time, slotDuration * firstSlot);
+		call SlotTimer.startOneShotAt(epoch_time, slotDuration * firstSlot);
 		call EpochTimer.startPeriodicAt(epoch_time, epochDuration);
 
 		return SUCCESS;
@@ -39,7 +39,7 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlotId) {
 
 	command error_t SlotScheduler.stop() {
 		bool wasStarted = isStarted;
-		call StartSlotTimer.stop();
+		call SlotTimer.stop();
 		call EpochTimer.stop();
 		isStarted = FALSE;
 		return (wasStarted) ? EALREADY : SUCCESS;
@@ -62,14 +62,19 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlotId) {
 		epoch_reference_time += epochDuration;
 	}
 
-	event void StartSlotTimer.fired() {
-		call EndSlotTimer.startOneShot(slotDuration);
-		signal SlotScheduler.slotStarted(schedSlot);
-	}
+	event void SlotTimer.fired() {
+	uint8_t nextSlot;		
+	if(!isSlotActive) {
+			isSlotActive = TRUE;
+			call SlotTimer.startOneShot(slotDuration);
+			signal SlotScheduler.slotStarted(schedSlot);
+			return;
+		}
 
-	event void EndSlotTimer.fired() {
-		uint8_t nextSlot = signal SlotScheduler.slotEnded(schedSlot);
+		isSlotActive = FALSE;
 
+		nextSlot = signal SlotScheduler.slotEnded(schedSlot);
+	
 		//If scheduler is not running don't schedule other slots
 		if(!isStarted)
 			return;
@@ -77,11 +82,11 @@ generic module SlotSchedulerP(uint32_t slotDuration, uint8_t maxSlotId) {
 		//Next slot in the same epoch or current and next slot are one just after the other between current and next epoch
 		if (nextSlot > schedSlot || (schedSlot == maxSlotId && nextSlot == 0)) {
 			schedSlot = nextSlot;
-			call StartSlotTimer.startOneShotAt(epoch_reference_time, slotDuration * schedSlot);
+			call SlotTimer.startOneShotAt(epoch_reference_time, slotDuration * schedSlot);
 		} else {
 			//Next slot is in next epoch
 			schedSlot = nextSlot;
-			call StartSlotTimer.startOneShotAt(epoch_reference_time + epochDuration, slotDuration * schedSlot);
+			call SlotTimer.startOneShotAt(epoch_reference_time + epochDuration, slotDuration * schedSlot);
 		}
 	}
 }

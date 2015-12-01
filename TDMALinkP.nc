@@ -1,22 +1,23 @@
 #include <Timer.h>
 #include <printf.h>
-
 #include "messages.h"
+
+//Sync beacons lost before entering in sync mode
+#define RESYNC_THRESHOLD 5
+
+//Minimum inactive slots to enter power saving
+#define SLEEP_SLOTS_THRESHOLD 1
+
+//Data ACK
+#define DATA_RETRY 1
+#define DATA_RETRY_DELAY SLOT_DURATION/4
+
 
 #define SYNC_SLOT 0
 #define JOIN_SLOT 1
-
 #define TOTAL_SLOTS (MAX_SLAVES+2)
 #define LAST_SLOT (TOTAL_SLOTS-1)
-
 #define SLOTS_UNAVAILABLE 0
-
-#define RESYNC_THRESHOLD 5
-
-#define DATA_RETRY 1
-#define DATA_RETRY_DELAY SLOT_DURATION/2
-
-#define SLEEP_SLOTS_THRESHOLD 1
 
 module TDMALinkP {
 	provides interface TDMALinkControl as Control;
@@ -73,6 +74,7 @@ module TDMALinkP {
 	uint8_t getNextSlaveSlot(uint8_t slot);
 	bool getSlaveRadioOff(uint8_t current, uint8_t next);
 	bool dataReady = FALSE;
+
 	// Outgoing data packet
 	message_t *dataMsg;
 	uint8_t dataLen;
@@ -80,17 +82,14 @@ module TDMALinkP {
 	// Sync beacon packet
 	SyncMsg* syncMsg;
 	message_t syncBuf;
-	bool syncSending = FALSE;
 
 	// Join request packet
 	message_t joinReqBuf;
 	JoinReqMsg* joinReqMsg;
-	bool joinReqSending = FALSE;
 
 	// Join answer packet
 	message_t joinAnsBuf;
 	JoinAnsMsg* joinAnsMsg;
-	bool joinAnsSending = FALSE;
 
 	void startSlotTask();
 
@@ -104,7 +103,9 @@ module TDMALinkP {
 		//Start master in SLOTTED MODE (radio managed by scheduler)
 		call SlotScheduler.start(0, SYNC_SLOT);
 
+		#ifdef DEBUG
 		printf("DEBUG: Master node %u started [SLAVE SLOTS:%u | SLOT DURATION:%ums | EPOCH DURATION:%ums]\n", TOS_NODE_ID, MAX_SLAVES, SLOT_DURATION, (MAX_SLAVES + 2) * SLOT_DURATION);
+		#endif
 
 		return SUCCESS;
 	}
@@ -112,11 +113,13 @@ module TDMALinkP {
 	command error_t Control.startSlave() {
 		isMaster = FALSE;
 
+		#ifdef DEBUG
 		printf("DEBUG: Slave node %u started\n", TOS_NODE_ID);
+		printf("DEBUG: Entering SYNC MODE\n");
+		#endif
 
 		//Start slave in SYNC MODE (radio always on)
 		syncMode = TRUE;
-		printf("DEBUG: Entering SYNC MODE\n");
 		call AMControl.start();
 
 		return SUCCESS;
@@ -134,7 +137,9 @@ module TDMALinkP {
 	}
 
 	event void SlotScheduler.slotStarted(uint8_t slot) {
+		#ifdef DEBUG
 		printf("DEBUG: Slot %d started\n", slot);
+		#endif
 
 		//Turn radio on, if it's already on execute slot task immediately
 		if(call AMControl.start() == EALREADY)
@@ -142,7 +147,9 @@ module TDMALinkP {
 	}
 
 	event void AMControl.startDone(error_t err) {
+		#ifdef DEBUG		
 		printf("DEBUG: Radio ON\n");
+		#endif
 
 		//Check if radio was turned on by slot scheduler
 		if(call SlotScheduler.isRunning())
@@ -176,13 +183,18 @@ module TDMALinkP {
 	event uint8_t SlotScheduler.slotEnded(uint8_t slot) {
 		uint8_t nextSlot;
 		uint8_t inactivePeriod;
+		
+		#ifdef DEBUG
 		printf("DEBUG: Slot %d ended\n", slot);
+		#endif
 
 		nextSlot = (isMaster) ? getNextMasterSlot(slot) : getNextSlaveSlot(slot);
 
 		//In sync mode the radio is always on and scheduler is not running
 		if(syncMode) {
+			#ifdef DEBUG
 			printf("DEBUG: Entering SYNC MODE\n");
+			#endif
 			call SlotScheduler.stop();
 			return SYNC_SLOT;
 		}
@@ -199,7 +211,9 @@ module TDMALinkP {
 
 		//Radio is turned off only if there is at least SLEEP_INACTIVE_SLOTS inactive slots between this and the next slot
 		if(inactivePeriod >= SLEEP_SLOTS_THRESHOLD) {
+			#ifdef DEBUG
 			printf("DEBUG: Keeping radio off for the next %u inactive slots\n", inactivePeriod);
+			#endif
 			call AMControl.stop();
 		}
 
@@ -222,7 +236,9 @@ module TDMALinkP {
 	uint8_t getNextSlaveSlot(uint8_t slot) {
 		if(slot == SYNC_SLOT && syncReceived == FALSE) {
 			missedSyncCount++;
+			#ifdef DEBUG
 			printf("DEBUG: Missed synchronization beacon %d/%d\n", missedSyncCount, RESYNC_THRESHOLD);
+			#endif
 
 			//Go to resync mode, returning RESYNC_SLOT stops the scheduler
 			if(missedSyncCount >= RESYNC_THRESHOLD) {
@@ -237,7 +253,9 @@ module TDMALinkP {
 
 		//If join failed, retry in the next epoch
 		if(slot == JOIN_SLOT && hasJoined == FALSE) {
+			#ifdef DEBUG
 			printf("DEBUG: Missing join answer\n");
+			#endif
 			return SYNC_SLOT;
 		}
 
@@ -253,7 +271,9 @@ module TDMALinkP {
 	}
 
 	event void AMControl.stopDone(error_t err) {
+		#ifdef DEBUG
 		printf("DEBUG: Radio OFF\n");
+		#endif
 
 		//FOR CONTROL INTERFACE: Signal that component has stopped
 		if(isStarted == FALSE)
@@ -261,24 +281,18 @@ module TDMALinkP {
 	}
 
 	void sendSyncBeacon() {
-		error_t status;
-		if (!syncSending) {
+			#ifdef DEBUG
 			printf("DEBUG: Sending synchronization beacon\n");
+			#endif
 			call PacketLink.setRetries(&syncBuf, 0);
-			status = call SyncSnd.send(AM_BROADCAST_ADDR, &syncBuf, sizeof(SyncMsg), call SlotScheduler.getEpochTime());
-			if (status == SUCCESS) {
-				syncSending = TRUE;
-			} else {
-				printf("DEBUG: Synchronization beacon sending failed\n");
-			}
-		}
+			call SyncSnd.send(AM_BROADCAST_ADDR, &syncBuf, sizeof(SyncMsg), call SlotScheduler.getEpochTime());
 	}
 
 	event void SyncSnd.sendDone(message_t* msg, error_t error) {
-		syncSending = FALSE;
-		if (error != SUCCESS) {
+		#ifdef DEBUG
+		if (error != SUCCESS)
 			printf("DEBUG: Synchronization beacon transmission failed\n");
-		}
+		#endif
 	}
 
 	event message_t* SyncRcv.receive(message_t* msg, void* payload, uint8_t length) {
@@ -305,12 +319,16 @@ module TDMALinkP {
 				//Join phase never completed
 				call SlotScheduler.start(ref_time, JOIN_SLOT);
 			}
+			#ifdef DEBUG
 			printf("DEBUG: Local scheduler started and synchronized with master scheduler\n");
 			printf("DEBUG: Entering SLOTTED MODE\n");	
+			#endif
 		} else {
 			//Synchronize the running scheduler
 			call SlotScheduler.syncEpochTime(ref_time);
+			#ifdef DEBUG
 			printf("DEBUG: Local scheduler synchronized with master scheduler\n");
+			#endif
 		}
 
 		syncReceived = TRUE;
@@ -320,30 +338,24 @@ module TDMALinkP {
 	}
 
 	void sendJoinRequest() {
-		//Introduce a collision avoidance delay for join requests
-		uint32_t delay = call JoinReqRandom.rand16() % SLOT_DURATION;
+		//Introduce a delay to reduce collision likelihood among join requests and answers
+		uint32_t delay = call JoinReqRandom.rand16() % (SLOT_DURATION / 2);
 		call JoinReqDelayTimer.startOneShot(delay);
 	}
 
 	event void JoinReqDelayTimer.fired() {
-		error_t status;
-		if (!joinReqSending) {
-			printf("DEBUG: Sending join request to master %d\n", masterAddr);
-			call PacketLink.setRetries(&joinReqBuf, 0);
-			status = call JoinReqSnd.send(masterAddr, &joinReqBuf, sizeof(JoinReqMsg));
-			if (status == SUCCESS) {
-				joinReqSending = TRUE;
-			} else {
-				printf("DEBUG: Join request sending failed\n");
-			}
-		}
+		#ifdef DEBUG
+		printf("DEBUG: Sending join request to master %d\n", masterAddr);
+		#endif
+		call PacketLink.setRetries(&joinReqBuf, 0);
+		call JoinReqSnd.send(masterAddr, &joinReqBuf, sizeof(JoinReqMsg));
 	}
 
 	event void JoinReqSnd.sendDone(message_t* msg, error_t error) {
-		joinReqSending = FALSE;
-		if (error != SUCCESS) {
+		#ifdef DEBUG
+		if (error != SUCCESS)
 			printf("DEBUG: Join request transmission failed\n");
-		}
+		#endif
 	}
 
 	event message_t* JoinReqRcv.receive(message_t* msg, void* payload, uint8_t length) {		
@@ -353,8 +365,9 @@ module TDMALinkP {
 			return msg;
 
 		slave = call AMPacket.source(msg);
-
+		#ifdef DEBUG
 		printf("DEBUG: Received join request from %d\n", slave);
+		#endif
 
 		allocSlot = allocateSlot(slave);
 
@@ -383,30 +396,19 @@ module TDMALinkP {
 	}
 
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot) {
-		error_t status;
-
-		//Send answer only if still inside join slot
-		if(call SlotScheduler.getScheduledSlot() != JOIN_SLOT)
-			return;
-
-		if (!joinReqSending) {
-			joinAnsMsg->slot = slot;
-			printf("DEBUG: Sending join answer to %d\n", slave);
-			call PacketLink.setRetries(&joinAnsBuf, 0);
-			status = call JoinAnsSnd.send(slave, &joinAnsBuf, sizeof(JoinAnsMsg));
-			if (status == SUCCESS) {
-				joinAnsSending = TRUE;
-			} else {
-				printf("DEBUG: Join answer to %d sending failed\n", slave);
-			}
-		}
+		joinAnsMsg->slot = slot;
+		#ifdef DEBUG
+		printf("DEBUG: Sending join answer to %d\n", slave);
+		#endif
+		call PacketLink.setRetries(&joinAnsBuf, 0);
+		call JoinAnsSnd.send(slave, &joinAnsBuf, sizeof(JoinAnsMsg));
 	}
 
 	event void JoinAnsSnd.sendDone(message_t* msg, error_t error) {
-		joinAnsSending = FALSE;
-		if (error != SUCCESS) {
+		#ifdef DEBUG
+		if (error != SUCCESS)
 			printf("DEBUG: Join answer transmission failed\n");
-		}
+		#endif
 	}
 
 	event message_t* JoinAnsRcv.receive(message_t* msg, void* payload, uint8_t length) {
@@ -417,7 +419,9 @@ module TDMALinkP {
 
 		assignedSlot = joinAnsMsg->slot;
 
+		#ifdef DEBUG
 		printf("DEBUG: Join completed to slot %u\n", assignedSlot);
+		#endif
 		
 		hasJoined = TRUE;
 
@@ -432,14 +436,15 @@ module TDMALinkP {
 	////////////////////// DATA TRANSMISSION INTERFACE FOR SLAVES /////////////////////
 
 	void sendData() {
-		if(dataReady) {
-			printf("DEBUG: Transmitting data\n");
-			call PacketLink.setRetries(dataMsg, DATA_RETRY);
-			call PacketLink.setRetryDelay(dataMsg, DATA_RETRY_DELAY);
-			call DataSnd.send(masterAddr, dataMsg, dataLen);
-		} else {
-			printf("DEBUG: No data to transmit\n");
-		}
+		if(!dataReady)
+			return;
+
+		#ifdef DEBUG
+		printf("DEBUG: Transmitting data\n");
+		#endif
+		call PacketLink.setRetries(dataMsg, DATA_RETRY);
+		call PacketLink.setRetryDelay(dataMsg, DATA_RETRY_DELAY);
+		call DataSnd.send(masterAddr, dataMsg, dataLen);
 	}
 
 	command error_t AMSend.cancel(message_t *msg) {
