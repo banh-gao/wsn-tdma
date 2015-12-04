@@ -121,17 +121,40 @@ Component usage
 
 \begin_layout Standard
 The implemented TDMA layer can support up to 254 slave nodes that negotiate
- needs to be assigned a data slot from the master node.
- To tune the layer to application needs, the number of available data slots
- (MAX_SLOTS) and the single slot duration (SLOT_DURATION) can be changed
+ a data slot allocation with the master node.
+ To tune the layer to application needs, the number of maximum supported
+ slaves (MAX_SLAVES) and a single slot duration (SLOT_DURATION) can be changed
  in the Makefile.
+ The default configuration has been tested in the attached simulation with
+ 10 slaves, with other simulations those values can be changed to achieve
+ the best protocol performances.
 \end_layout
 
 \begin_layout Standard
-The custom TDMALinkControl interface is similar to the SplitControl interface.
- It has a startMaster and startSlave commands as well as startDone event
- that will be signaled when the layer is ready to receive or transmit data
- (after slave has joined).
+The custom TDMALinkControl interface is similar to the SplitControl interface,
+ what differs is the startMaster and startSlave commands to start the layer
+ in either mater or slave mode.
+ The startDone event will be signaled when the layer is ready to receive
+\begin_inset Foot
+status collapsed
+
+\begin_layout Plain Layout
+Master is ready after the radio has been turned on
+\end_layout
+
+\end_inset
+
+ or transmit
+\begin_inset Foot
+status collapsed
+
+\begin_layout Plain Layout
+Slave is ready after it has successfully completed the join with the master
+\end_layout
+
+\end_inset
+
+ data.
 \end_layout
 
 \begin_layout Standard
@@ -160,8 +183,6 @@ The epoch timer of the SlotScheduler in the slaves is restarted with the
  if there is already one scheduled slot it will be executed using the reference
  time of when it was started (although this is commonly not the case since
  beacons should arrive only during the synchronization slot).
- It is stopped when a slave enters in synchronization mode and restarted
- when the synchronization beacon arrives.
 \end_layout
 
 \begin_layout Standard
@@ -174,24 +195,47 @@ Join requests from slaves are sent with a random delay to avoid collisions
 \begin_layout Standard
 Radio in the slaves nodes can be turned off during all inactive slot periods.
  The number of next inactive slots can be determined at the end of an active
- slot, if it more than a given threshold (set to 1 inactive slot) the radio
- is turned off.
+ slot, if it more than a given threshold the radio is turned off.
  It is turned back on only before executing an active task or when a node
  enters in synchronization mode.
+\end_layout
+
+\begin_layout Standard
+When a slave is in synchronization (or resynchronization) mode the slot
+ scheduler is suspended and the radio is kept on until the slave is able
+ to synchronize with the master.
+ Synchronization mode is activated at boot and when the number of missed
+ synchronization beacons exceeds a fixed threshold value.
+\end_layout
+
+\begin_layout Standard
+Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "fig:Nodes-States-Machine"
+
+\end_inset
+
+ depicts the possible states for both master and slave nodes.
+ Since the states are affected by the time slots, the different slots are
+ represented with different colors.
+ The only states that are not affected by slots timing are states for synchroniz
+ation mode that are not managed by the slot scheduler.
 \end_layout
 
 \begin_layout Standard
 \begin_inset Float figure
 wide false
 sideways false
-status open
+status collapsed
 
 \begin_layout Plain Layout
 \noindent
 \align center
 \begin_inset Graphics
-	filename flow.svg
-	scale 50
+	filename flow.eps
+	width 100text%
+	scaleBeforeRotation
 
 \end_inset
 
@@ -202,7 +246,13 @@ status open
 \begin_inset Caption
 
 \begin_layout Plain Layout
-Nodes FSA
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:Nodes-States-Machine"
+
+\end_inset
+
+Node's States Machine
 \end_layout
 
 \end_inset
@@ -212,6 +262,21 @@ Nodes FSA
 
 \begin_layout Plain Layout
 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The git repository of this project with its development history is freely
+ available at 
+\begin_inset Flex Emph
+status collapsed
+
+\begin_layout Plain Layout
+https://github.com/zeroDenial/wsn-tdma
 \end_layout
 
 \end_inset
