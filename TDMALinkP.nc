@@ -80,7 +80,6 @@ module TDMALinkP {
 	uint8_t dataLen;
 
 	// Sync beacon packet
-	SyncMsg* syncMsg;
 	message_t syncBuf;
 
 	// Join request packet
@@ -95,8 +94,6 @@ module TDMALinkP {
 
 	command error_t Control.startMaster() {
 		isMaster = TRUE;
-
-		syncMsg = call SyncSnd.getPayload(&joinAnsBuf, sizeof(SyncMsg));
 		joinReqMsg = call JoinReqSnd.getPayload(&joinAnsBuf, sizeof(JoinReqMsg));
 		joinAnsMsg = call JoinAnsSnd.getPayload(&joinAnsBuf, sizeof(JoinAnsMsg));
 
@@ -209,7 +206,7 @@ module TDMALinkP {
 		if(slot == LAST_SLOT && nextSlot == SYNC_SLOT)
 			inactivePeriod = 0;
 
-		//Radio is turned off only if there is at least SLEEP_INACTIVE_SLOTS inactive slots between this and the next slot
+		//Radio is turned off only if the number of inactive slots between this and the next slot is >= of a threshold
 		if(inactivePeriod >= SLEEP_SLOTS_THRESHOLD) {
 			#ifdef DEBUG
 			printf("DEBUG: Keeping radio off for the next %u inactive slots\n", inactivePeriod);
@@ -240,14 +237,14 @@ module TDMALinkP {
 			printf("DEBUG: Missed synchronization beacon %d/%d\n", missedSyncCount, RESYNC_THRESHOLD);
 			#endif
 
-			//Go to resync mode, returning RESYNC_SLOT stops the scheduler
+			//Go to resync mode
 			if(missedSyncCount >= RESYNC_THRESHOLD) {
 				syncMode = TRUE;
 				return SYNC_SLOT;
 			}
 		}
 
-		//If node needs to join try to join in next slot (only if synchronization has succeeded)
+		//If node needs to join try to join in next slot
 		if(slot == SYNC_SLOT && hasJoined == FALSE)
 			return JOIN_SLOT;
 
@@ -382,7 +379,7 @@ module TDMALinkP {
 
 	uint8_t allocateSlot(am_addr_t slave) {
 		int slot;
-		//Check if slot was already allocated to the node
+		//Check if slot was already allocated to the slave
 		for(slot=0;slot<MAX_SLAVES;slot++) {
 			if(allocatedSlots[slot] == slave)
 				return slot+2;
@@ -392,7 +389,7 @@ module TDMALinkP {
 			return SLOTS_UNAVAILABLE;
 
 		allocatedSlots[nextFreeSlotPos] = slave;
-		return (nextFreeSlotPos++)+2;
+		return (nextFreeSlotPos++) + 2;
 	}
 
 	void sendJoinAnswer(am_addr_t slave, uint8_t slot) {
